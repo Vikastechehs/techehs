@@ -1,0 +1,109 @@
+{
+  "no": 90,
+  "path": "industries/oil-and-gas",
+  "type": "Industry",
+  "template": "industry",
+  "meta_title": "Oil and Gas EHS Software & Process Safety | TECH EHS",
+  "meta_description": "EHS software, training and safety animation for oil and gas: permits, SIMOPS, process safety, H2S and contractor control across upstream, offshore and refining.",
+  "nav_label": "Oil & Gas",
+  "eyebrow": "EHS for Oil and Gas",
+  "h1": "Process safety and permit control for oil and gas operations",
+  "definition": "TECH EHS for oil and gas is a set of EHS software modules, training and safety animation that helps upstream, midstream and downstream operators control process safety, permits, SIMOPS, H2S exposure and contractor risk across onshore, offshore and remote sites.",
+  "hero_sub": "From wellsites and FPSOs to refineries and terminals, connect permits, isolations, MOC, PSSR and incident data so major accident hazards are managed with live information, not paper.",
+  "hero_bullets": ["Used by operators including Gulf Keystone", "Offline mobile for remote and offshore sites", "Process safety events tracked to API RP 754"],
+  "primary_cta": "Book a Demo",
+  "secondary_cta": "Talk to an Oil & Gas Specialist",
+  "hero_visual": {
+    "kind": "map",
+    "title": "Asset Overview – Upstream & Refining",
+    "kpis": [{"label": "Live permits", "value": "142*"}, {"label": "Tier 1/2 PSEs YTD", "value": "1*"}, {"label": "Contractors on site", "value": "1,850*"}],
+    "rows": [
+      {"title": "Well pad 7 – H2S alarm drill", "status": "Closed"},
+      {"title": "Refinery CDU turnaround – SIMOPS review", "status": "Pending"},
+      {"title": "Offshore platform – Hot work in Zone 1", "status": "Live"},
+      {"title": "MOC – Flare header tie-in", "status": "Approved"}
+    ]
+  },
+  "stats": [{"value": "17+", "label": "Years in EHS"}, {"value": "30+", "label": "Software modules"}, {"value": "3", "label": "ISO certifications held"}, {"value": "2", "label": "Offices: India and USA"}],
+  "problem": {
+    "title": "Why oil and gas safety needs more than a general EHS tool",
+    "intro": "Oil and gas operations combine major accident hazards, flammable and toxic inventories and large contractor workforces, often at sites hours from the nearest office or hospital.",
+    "points": [
+      {"title": "Process safety and SIMOPS", "text": "Loss of containment, hot work in classified hazardous areas and simultaneous drilling, production and maintenance require permits, isolations and MOC to be checked against each other, not managed in silos."},
+      {"title": "H2S and toxic exposure", "text": "Sour gas fields and refinery units need gas test records, personal monitor data, H2S training status and rescue readiness verified before people enter the work area."},
+      {"title": "Turnarounds and remote sites", "text": "During shutdowns contractor headcount can multiply overnight, while offshore and desert sites run with little connectivity, making paper inductions, permits and competency checks the weak point."}
+    ]
+  },
+  "features_title": "How TECH EHS supports oil and gas operators",
+  "features_intro": "Configured around the way upstream, midstream and downstream sites actually run: by asset, unit, area classification and contractor.",
+  "features": [
+    {"icon": "lock", "title": "Integrated permits and isolations", "text": "Hot work, confined space, line break and electrical permits linked to isolation certificates, gas tests and hazardous area classification."},
+    {"icon": "layers", "title": "SIMOPS and area conflict checks", "text": "Flag incompatible activities by unit, module or well pad, such as hot work near a well intervention or lifting over live process equipment."},
+    {"icon": "flame", "title": "Process safety event tracking", "text": "Classify loss of primary containment events as Tier 1 to Tier 4 under API RP 754 and IOGP 456, with severity calculation and barrier analysis."},
+    {"icon": "cog", "title": "MOC and PSSR", "text": "Run management of change and pre-startup safety review workflows that meet OSHA PSM elements before any modified equipment returns to service."},
+    {"icon": "users", "title": "Contractor and turnaround control", "text": "Pre-qualify contractor companies, verify individual competencies and inductions, and manage gate access during peak turnaround headcount."},
+    {"icon": "mobile", "title": "Offline mobile for remote assets", "text": "Capture permits, inspections, observations and incidents offshore or in the desert without signal, and sync when the link is restored."}
+  ],
+  "steps_title": "How we roll out on an oil and gas asset",
+  "steps": [
+    {"title": "Map assets and hazards", "text": "We model your fields, platforms, units and area classifications, and import your permit types, risk matrix and major accident hazard register."},
+    {"title": "Configure critical workflows", "text": "Permits, isolations, SIMOPS rules, MOC and PSSR are set up to match your safety management system and approval authorities."},
+    {"title": "Train crews and contractors", "text": "Rotational crews and contractors are trained through e-learning and animated videos in their own languages before go-live."},
+    {"title": "Go live and monitor", "text": "Sites go live in phases, with process safety and permit dashboards reviewed by asset managers and corporate HSE."}
+  ],
+  "outcomes_title": "What oil and gas clients typically see",
+  "outcomes": [
+    {"metric": "50%*", "label": "Faster permit turnaround", "text": "Area authorities approve from the field instead of waiting for permits to reach the control room."},
+    {"metric": "35%*", "label": "Fewer SIMOPS findings", "text": "Conflicting jobs are flagged automatically before permits are issued."},
+    {"metric": "100%*", "label": "Contractors verified before entry", "text": "No worker reaches the site without valid induction, medical and competency records."}
+  ],
+  "standards_title": "Built around oil and gas standards and regulations",
+  "standards": ["OSHA PSM 29 CFR 1910.119", "API RP 754 (Process Safety Performance Indicators)", "IOGP Report 459 (Life-Saving Rules)", "IOGP Report 510 (Operating Management System Framework)", "IEC 61511 (Functional safety – SIS)", "ISO 45001:2018", "UK HSE HSG250", "IEC 61882 (HAZOP)"],
+  "comparison": {
+    "title": "Disconnected systems vs. one oil and gas EHS platform",
+    "cols": ["Paper and separate tools", "TECH EHS for Oil & Gas"],
+    "rows": [
+      ["Permits and isolations", "Separate books per control room", "One live register linked to isolations and gas tests"],
+      ["SIMOPS", "Daily meeting and whiteboard", "Automatic conflict checks by area and activity"],
+      ["Process safety events", "Classified inconsistently across assets", "API RP 754 tiers calculated the same way everywhere"],
+      ["Turnaround contractors", "Paper inductions and manual gate lists", "Digital pre-qualification, induction and access control"],
+      ["Remote and offshore sites", "Forms flown or emailed back weekly", "Offline mobile capture with automatic sync"],
+      ["MOC and PSSR", "Email chains and spreadsheets", "Tracked workflows with sign-off before startup"]
+    ]
+  },
+  "sections": [
+    {
+      "kind": "cards",
+      "id": "modules",
+      "title": "Recommended modules for oil and gas",
+      "intro": "Most operators start with permits, contractors and incidents, then extend to process safety and inspection modules.",
+      "items": [
+        {"icon": "lock", "title": "Permit to Work", "text": "Hot work, confined space and line break permits with SIMOPS checks and gas test records.", "link": "software/permit-to-work-software"},
+        {"icon": "shield", "title": "Lockout/Tagout", "text": "Isolation certificates, lock registers and verification for process and electrical energy.", "link": "software/lockout-tagout-software"},
+        {"icon": "cog", "title": "Management of Change", "text": "Technical, organizational and temporary MOC with risk review and closure tracking.", "link": "software/change-management-software"},
+        {"icon": "check", "title": "Pre-Startup Safety Review", "text": "PSSR checklists that confirm construction, procedures and training are complete before startup.", "link": "software/pre-startup-safety-review-2"},
+        {"icon": "users", "title": "Contractor Management", "text": "Pre-qualification, competency tracking and site access for turnaround and project contractors.", "link": "software/contractor-management-software"},
+        {"icon": "alert", "title": "Incident Management", "text": "Incident, process safety event and near miss reporting with root cause analysis and CAPA.", "link": "software/incident-management-software"},
+        {"icon": "bell", "title": "Emergency Preparedness", "text": "Drill schedules, muster tracking and emergency response plans for H2S and fire scenarios.", "link": "software/emergency-preparedness"},
+        {"icon": "clipboard", "title": "Equipment Inspections", "text": "Inspection rounds for safety-critical equipment, gas detectors, fire systems and lifting gear.", "link": "software/equipment-inspections"}
+      ]
+    },
+    {
+      "kind": "logos",
+      "id": "clients",
+      "title": "Trusted in energy and process industries",
+      "items": [{"title": "Gulf Keystone"}, {"title": "Rubis"}, {"title": "Sembcorp"}, {"title": "Gujarat Fluorochemicals"}]
+    }
+  ],
+  "testimonial": {"quote": "With rotational crews and remote well pads, we needed permits and inspections that work offline and still give head office a live picture. That is what we have now.", "name": "[Client name]", "role": "HSE Manager", "company": "[Client company], Oil & Gas"},
+  "related": ["software/permit-to-work-software", "software/pre-startup-safety-review-2", "hazop-study-gap-analysis", "industries/chemical"],
+  "faqs": [
+    {"q": "Does TECH EHS support OSHA PSM compliance?", "a": "Yes. Modules for MOC, PSSR, incident investigation, operating procedures, contractor management, training and audits map to the elements of OSHA 29 CFR 1910.119 and similar process safety regulations."},
+    {"q": "Can process safety events be classified under API RP 754?", "a": "Yes. Loss of primary containment events are classified as Tier 1 to Tier 4 using API RP 754 and IOGP 456 thresholds for material release, consequence and location, and reported as rates by asset."},
+    {"q": "How does the system handle SIMOPS?", "a": "Permits and planned activities are tied to areas or equipment, and configurable rules flag incompatible combinations such as hot work during well intervention or crane lifts over pressurized lines, before approval."},
+    {"q": "Does the mobile app work offshore without connectivity?", "a": "Yes. The Android and iOS apps work fully offline for permits, inspections, observations and incidents, and synchronize when satellite or Wi-Fi connectivity is available."},
+    {"q": "Can it manage H2S safety?", "a": "Yes. Gas test records, H2S training and fit test status, monitor assignments and rescue team readiness can be required as preconditions for permits in sour service areas."},
+    {"q": "Do you provide oil and gas training content too?", "a": "Yes. TECH EHS produces HSE e-learning and animated safety videos on topics such as H2S awareness, permit to work, confined space and incident recreation, in multiple languages."}
+  ],
+  "cta": {"title": "See TECH EHS configured for your asset", "text": "We will walk through permits, SIMOPS and process safety workflows using a sample of your units and permit types.", "button": "Book a Demo"}
+}

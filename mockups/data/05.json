@@ -1,0 +1,109 @@
+{
+  "no": 5,
+  "path": "software/permit-to-work-software",
+  "type": "Software",
+  "template": "product",
+  "meta_title": "Permit to Work Software | Digital PTW System | TECH EHS",
+  "meta_description": "Issue, approve and close hot work, confined space and electrical permits digitally, with LOTO isolations, gas tests, SIMOPS checks and QR permit boards.",
+  "nav_label": "Permit to Work",
+  "eyebrow": "Permit to Work Software",
+  "h1": "Control every high-risk job with one digital permit to work",
+  "definition": "TECH EHS Permit to Work software is a digital PTW platform that issues, approves, monitors and closes high-risk work permits, linking each permit to isolations, gas test results, risk assessments and conflicting work so only safe, authorized jobs start on site.",
+  "hero_sub": "Replace carbon-copy permit books with permits that know which isolations are live, which jobs clash in the same area and which gas readings are out of date.",
+  "hero_bullets": ["8 permit types configured out of the box*", "LOTO isolations linked to every permit", "Offline approvals on Android and iOS"],
+  "primary_cta": "Book a Demo",
+  "secondary_cta": "Watch 2-min Overview",
+  "hero_visual": {
+    "kind": "dashboard",
+    "title": "Live Permits – Unit 3 Process Area",
+    "kpis": [{"label": "Live permits", "value": "24*"}, {"label": "Pending approval", "value": "6*"}, {"label": "SIMOPS conflicts", "value": "2*"}],
+    "rows": [
+      {"title": "Hot Work – Tank 4B nozzle repair", "status": "Live"},
+      {"title": "Confined Space – Separator V-201 entry", "status": "Pending"},
+      {"title": "Electrical Isolation – MCC-7 feeder", "status": "Approved"},
+      {"title": "Gas re-test due – Pipe rack PR-12", "status": "Overdue"}
+    ]
+  },
+  "stats": [{"value": "17+", "label": "Years in EHS"}, {"value": "30+", "label": "Software modules"}, {"value": "8*", "label": "Standard permit types"}, {"value": "3", "label": "ISO certifications held"}],
+  "problem": {
+    "title": "Why paper permits fail when the work gets complex",
+    "intro": "Permit to work failures sit behind many major process incidents, from Piper Alpha onward. The common thread is not missing paperwork but missing information at the moment a permit is signed.",
+    "points": [
+      {"title": "Isolations that nobody can see", "text": "Paper permits rarely show which energy sources are locked out, by whom and under which other permits, so isolations get removed while work is still open."},
+      {"title": "Clashing jobs in the same area", "text": "Hot work next to a line break or a confined space entry under a crane lift goes unnoticed when permits sit in separate books at separate control rooms."},
+      {"title": "Stale gas tests and expired permits", "text": "Gas readings taken at 7 a.m. still cover work at 3 p.m., and permits are extended verbally without re-validation or shift handover records."}
+    ]
+  },
+  "features_title": "A permit system that checks the job before anyone signs",
+  "features_intro": "Every permit carries its own risk assessment, isolations, gas tests and approvals, and the system blocks issue until each precondition is met.",
+  "features": [
+    {"icon": "file", "title": "Configurable permit types and forms", "text": "Set up hot work, cold work, confined space, height, electrical, excavation, radiography and lifting permits with your own checklists, PPE requirements, validity periods and mandatory fields."},
+    {"icon": "lock", "title": "Isolation and LOTO linkage", "text": "Attach electrical, mechanical and process isolation points to a permit, record lock and tag numbers, and prevent de-isolation while any linked permit remains open."},
+    {"icon": "layers", "title": "SIMOPS conflict checks", "text": "Permits are mapped to areas and equipment tags, and the system flags incompatible jobs running at the same time and place before approval, not after an incident."},
+    {"icon": "zap", "title": "Gas testing records", "text": "Log O2, LEL, H2S and CO readings with instrument ID and calibration date, set re-test intervals, and suspend a permit automatically when a reading is out of range or overdue."},
+    {"icon": "check", "title": "Multi-level digital approvals", "text": "Route permits through issuer, area authority, performing authority and isolating authority with mobile e-signatures, time stamps and competency checks on each signatory."},
+    {"icon": "eye", "title": "QR permit boards and site display", "text": "Print a QR code for each live permit at the worksite so anyone can scan to verify status, conditions and expiry, and show every live permit on a control room board or plot plan."}
+  ],
+  "steps_title": "How a digital permit moves through its lifecycle",
+  "steps": [
+    {"title": "Request and plan", "text": "The performing authority raises a permit from the mobile app or desktop, selects the area and equipment, and attaches the JSA or task risk assessment."},
+    {"title": "Isolate and test", "text": "Isolating authorities apply and record isolations, and gas testers log readings, while the system runs SIMOPS checks against other live permits in the area."},
+    {"title": "Approve and issue", "text": "Each authority signs off on mobile, the permit goes live with a QR code at the worksite, and validity, re-tests and shift handovers are tracked in real time."},
+    {"title": "Suspend, close and hand back", "text": "Work is closed out with a site inspection, isolations are removed in sequence, the equipment is handed back to operations and the full record is archived for audit."}
+  ],
+  "outcomes_title": "What permit issuers and HSE teams typically see",
+  "outcomes": [
+    {"metric": "50%*", "label": "Faster permit issue", "text": "Mobile approvals replace walking a permit book between control rooms for signatures."},
+    {"metric": "100%*", "label": "Permits linked to isolations", "text": "No permit goes live without its isolation and gas test preconditions recorded."},
+    {"metric": "70%*", "label": "Less time compiling permit audits", "text": "Every signature, reading and handover is searchable instead of filed in binders."}
+  ],
+  "standards_title": "Built around the standards you're audited against",
+  "standards": ["UK HSE HSG250 (Guidance on permit-to-work systems)", "OSHA 29 CFR 1910.146 (Permit-required confined spaces)", "OSHA 29 CFR 1910.147 (Lockout/Tagout)", "OSHA 29 CFR 1910.252 (Hot work)", "OSHA PSM 29 CFR 1910.119", "NFPA 70E", "IOGP Report 459", "ISO 45001:2018"],
+  "comparison": {
+    "title": "Paper permit books vs. TECH EHS Permit to Work",
+    "cols": ["Paper permit books", "TECH EHS Permit to Work"],
+    "rows": [
+      ["Approval time", "Hours chasing signatures across control rooms", "Mobile approvals in minutes"],
+      ["Isolations", "Separate lock register, no link to permits", "Isolation points tied to each permit, de-isolation blocked while open"],
+      ["Conflicting work", "Relies on the issuer remembering other jobs", "Automatic SIMOPS checks by area and equipment"],
+      ["Gas testing", "Readings written on the permit, re-tests missed", "Timed re-test alerts and automatic suspension"],
+      ["Permit status at the worksite", "Faded copy in a plastic sleeve", "QR code showing live status and conditions"],
+      ["Audit trail", "Binders archived off site", "Full digital history searchable by area, contractor or tag"]
+    ]
+  },
+  "sections": [
+    {
+      "kind": "cards",
+      "id": "permit-types",
+      "title": "Permit types covered",
+      "intro": "Each permit type ships with a starter checklist based on common industry practice, and every field, approver and validity rule can be changed to match your procedure.",
+      "items": [
+        {"icon": "flame", "title": "Hot work", "text": "Welding, cutting and grinding with fire watch, combustible clearance, spark containment and gas test requirements."},
+        {"icon": "alert", "title": "Confined space entry", "text": "Entry supervisor, attendant and entrant records, continuous atmospheric monitoring and rescue plan sign-off."},
+        {"icon": "hardhat", "title": "Work at height", "text": "Fall protection plan, anchor point checks, scaffold tag status and rescue arrangements for work above 1.8 m."},
+        {"icon": "zap", "title": "Electrical", "text": "Live and dead working, arc flash boundaries, test-before-touch verification and NFPA 70E PPE category."},
+        {"icon": "tool", "title": "Excavation", "text": "Underground service scans, shoring or sloping method, spoil placement and daily competent person inspection."},
+        {"icon": "cog", "title": "Cold work", "text": "General maintenance, line breaking and mechanical work with no ignition source, linked to process isolations."},
+        {"icon": "shield", "title": "Radiography", "text": "Source custody, barricade radius, radiation survey readings and licensed radiographer details for NDT work."},
+        {"icon": "truck", "title": "Lifting operations", "text": "Lift plan category, crane and rigging certificates, exclusion zones and critical lift approvals."}
+      ]
+    },
+    {
+      "kind": "logos",
+      "id": "clients",
+      "title": "Used by operations teams in high-hazard industries",
+      "items": [{"title": "Gulf Keystone"}, {"title": "Gujarat Fluorochemicals"}, {"title": "Rubis"}, {"title": "Sembcorp"}, {"title": "JK Cement"}, {"title": "Jindal Steel"}]
+    }
+  ],
+  "testimonial": {"quote": "During our last turnaround we had hundreds of permits live at once. Seeing every isolation and every clashing job on one screen is what made the difference for our area authorities.", "name": "[Client name]", "role": "Operations Superintendent", "company": "[Client company], Oil & Gas"},
+  "related": ["software/lockout-tagout-software", "software/job-safety-analysis", "software/contractor-management-software", "software/permit-to-work-system"],
+  "faqs": [
+    {"q": "What is permit to work software?", "a": "Permit to work software is a digital system that controls high-risk, non-routine work by issuing, approving, monitoring and closing permits electronically, with linked risk assessments, isolations and gas test records."},
+    {"q": "How does the software link permits to lockout/tagout?", "a": "Isolation points are recorded against each permit with lock and tag numbers. One isolation can cover several permits, and the system will not allow it to be removed until every linked permit is closed or suspended."},
+    {"q": "How do SIMOPS conflict checks work?", "a": "Each permit is tied to an area, unit or equipment tag. When a new permit is requested, the system compares it against live permits nearby and flags combinations your rules define as incompatible, such as hot work near a line break or a lift over an occupied confined space."},
+    {"q": "Can permits be approved on a phone without network coverage?", "a": "Yes. The Android and iOS apps support offline capture of permit details, checklists and gas readings, and sync approvals as soon as a connection is available. Sites can choose which steps require online verification."},
+    {"q": "What happens at shift change?", "a": "Outgoing and incoming permit holders complete a digital handover that records the status of work, isolations and gas tests, and the permit cannot continue on the next shift until the handover is signed."},
+    {"q": "Can contractors raise their own permits?", "a": "Yes. Contractor supervisors can request permits through the app, and the system checks their company approval and individual competency records before the permit reaches the issuing authority."}
+  ],
+  "cta": {"title": "See your permit process running digitally", "text": "We will configure a demo with your permit types, approval chain and a sample plot plan from your site.", "button": "Book a Demo"}
+}

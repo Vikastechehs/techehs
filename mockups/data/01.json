@@ -1,0 +1,93 @@
+{
+  "no": 1,
+  "path": "software/occupational-health-and-safety-software",
+  "type": "Software",
+  "template": "product",
+  "meta_title": "Occupational Health and Safety Software | TECH EHS",
+  "meta_description": "Manage incidents, risk, inspections, permits, training and occupational health in one ISO 45001-aligned OHS platform. Cloud, on-premise and offline mobile.",
+  "nav_label": "Occupational Health & Safety",
+  "eyebrow": "Occupational Health and Safety Software",
+  "h1": "Run your entire OHS management system from one platform",
+  "definition": "TECH EHS Occupational Health and Safety software is an integrated platform that connects incident reporting, hazard and risk assessment, inspections, permits, training, and worker health surveillance so organizations can run an ISO 45001-aligned OHS management system from a single source of truth.",
+  "hero_sub": "Replace scattered spreadsheets, paper forms and point tools with one connected system where every hazard, incident and corrective action is traceable from the field to the boardroom.",
+  "hero_bullets": ["30+ configurable EHS modules", "Offline mobile capture on Android and iOS", "ISO 45001:2018 aligned workflows"],
+  "primary_cta": "Book a Demo",
+  "secondary_cta": "Watch 2-min Overview",
+  "hero_visual": {
+    "kind": "dashboard",
+    "title": "OHS Performance – All Sites",
+    "kpis": [{"label": "LTIFR", "value": "0.42*"}, {"label": "Open actions", "value": "37*"}, {"label": "Days without LTI", "value": "212*"}],
+    "rows": [
+      {"title": "Near miss – Forklift reversing, Warehouse 2", "status": "Pending"},
+      {"title": "HIRA review – Boiler house", "status": "Approved"},
+      {"title": "Annual audiometry – Fabrication shop", "status": "Overdue"},
+      {"title": "Monthly site inspection – Plant A", "status": "Closed"}
+    ]
+  },
+  "stats": [{"value": "17+", "label": "Years in EHS"}, {"value": "30+", "label": "Software modules"}, {"value": "3", "label": "ISO certifications held"}, {"value": "2", "label": "Offices: India and USA"}],
+  "problem": {
+    "title": "Why fragmented OHS data puts workers and certifications at risk",
+    "intro": "Most safety teams still run their OHS program across email, Excel trackers and paper binders. The result is lagging data, missed actions and audit findings that could have been prevented.",
+    "points": [
+      {"title": "Hazards reported but never closed", "text": "Without an owner, due date and escalation, corrective actions sit in inboxes until the same hazard causes an injury."},
+      {"title": "No single view of risk", "text": "Incident, inspection and health data live in different files, so leaders cannot see which sites, tasks or contractors carry the most risk."},
+      {"title": "Audit preparation takes weeks", "text": "Compiling evidence for ISO 45001 surveillance audits or regulator visits means hunting through folders instead of pulling a report."}
+    ]
+  },
+  "features_title": "Everything an OHS management system needs, connected",
+  "features_intro": "Start with the modules you need today and switch on more as your program matures. Every module shares the same users, locations, risk matrix and action tracker.",
+  "features": [
+    {"icon": "alert", "title": "Incident and near miss reporting", "text": "Capture injuries, illnesses, property damage and near misses in under two minutes from a phone, with photos, GPS and voice notes, then route them for investigation and root cause analysis."},
+    {"icon": "search", "title": "Hazard identification and risk assessment", "text": "Build HIRA and JSA registers using your own risk matrix, link controls to the hierarchy of controls, and trigger reviews when tasks, equipment or legislation change."},
+    {"icon": "clipboard", "title": "Inspections and audits", "text": "Run scheduled and ad hoc checklists with scoring, photo evidence and automatic action creation for every failed item."},
+    {"icon": "lock", "title": "Permit to work and LOTO", "text": "Issue hot work, confined space, work at height and electrical permits with gas test records, isolation points and digital sign-off."},
+    {"icon": "users", "title": "Occupational health surveillance", "text": "Track pre-employment and periodic medicals, audiometry, spirometry and exposure monitoring with fitness-for-work status and due-date reminders."},
+    {"icon": "chart", "title": "Leading and lagging KPI dashboards", "text": "Report LTIFR, TRIR, severity rate and leading indicators by site, department or contractor, with Power BI integration for enterprise reporting."}
+  ],
+  "steps_title": "How it works",
+  "steps": [
+    {"title": "Configure your structure", "text": "We set up your sites, departments, risk matrix, forms and approval chains to match your existing OHS procedures."},
+    {"title": "Capture in the field", "text": "Workers and supervisors report hazards, incidents and inspections from the mobile app, online or offline."},
+    {"title": "Investigate and act", "text": "Investigators apply 5 Whys or fishbone analysis, assign CAPAs with owners and deadlines, and track closure with automated escalation."},
+    {"title": "Review and improve", "text": "Leaders review live dashboards and management review reports to set objectives and close the Plan-Do-Check-Act loop."}
+  ],
+  "outcomes_title": "What OHS teams typically see",
+  "outcomes": [
+    {"metric": "45%*", "label": "Faster incident reporting", "text": "Mobile capture removes the paper handoff between the shop floor and the safety office."},
+    {"metric": "3x*", "label": "More near misses reported", "text": "Simple, anonymous-option reporting builds a stronger leading-indicator base."},
+    {"metric": "60%*", "label": "Less audit preparation time", "text": "Evidence for every clause is already linked and searchable."}
+  ],
+  "standards_title": "Built around the standards you're audited against",
+  "standards": ["ISO 45001:2018", "ISO 14001:2015", "ISO 19011:2018", "OSHA 29 CFR 1904 (Recordkeeping)", "OSHA 29 CFR 1910", "UK RIDDOR 2013", "ILO-OSH 2001"],
+  "comparison": {
+    "title": "Spreadsheets vs. an integrated OHS platform",
+    "cols": ["Paper / spreadsheets", "TECH EHS OHS Software"],
+    "rows": [
+      ["Incident reporting", "Paper forms retyped days later", "Mobile report with photos in minutes"],
+      ["Corrective actions", "Tracked in personal Excel files", "Central tracker with owners and escalation"],
+      ["Risk registers", "Static documents reviewed yearly", "Live HIRA linked to incidents and inspections"],
+      ["Health surveillance", "Medical records in separate files", "Due-date alerts and fitness-for-work status"],
+      ["KPI reporting", "Manual monthly consolidation", "Real-time dashboards and Power BI feeds"],
+      ["Audit readiness", "Weeks of evidence gathering", "Clause-mapped records on demand"]
+    ]
+  },
+  "sections": [
+    {
+      "kind": "logos",
+      "id": "clients",
+      "title": "Trusted by safety teams in high-hazard industries",
+      "items": [{"title": "Gulf Keystone"}, {"title": "Gujarat Fluorochemicals"}, {"title": "ACG"}, {"title": "Rubis"}, {"title": "JK Cement"}, {"title": "NatSteel"}, {"title": "Sembcorp"}, {"title": "Jindal Steel"}]
+    }
+  ],
+  "testimonial": {"quote": "We moved incident reporting, inspections and permits off paper in one rollout. Our leadership now reviews the same live numbers the site teams see.", "name": "[Client name]", "role": "Group HSE Head", "company": "[Client company], Manufacturing"},
+  "related": ["software/incident-management-software", "software/audit-management-software", "software/permit-to-work-software", "software/safety-dashboard"],
+  "faqs": [
+    {"q": "What is occupational health and safety software?", "a": "It is a digital system for managing the core processes of an OHS program, including incident reporting, risk assessment, inspections, permits, training and health surveillance, with a shared action tracker and reporting layer."},
+    {"q": "Does TECH EHS support ISO 45001 certification?", "a": "Yes. Workflows map to ISO 45001:2018 clauses such as hazard identification (6.1.2), incident investigation (10.2) and performance evaluation (9.1), and evidence can be exported for certification and surveillance audits."},
+    {"q": "Can we start with a few modules and add more later?", "a": "Yes. Most clients start with incident management, inspections and permits, then add modules such as contractor management, training or occupational health without migrating data."},
+    {"q": "Does the mobile app work without internet?", "a": "Yes. The Android and iOS apps capture reports, inspections and photos offline and sync automatically when a connection is available."},
+    {"q": "Can it be deployed on our own servers?", "a": "TECH EHS is available as cloud SaaS or on-premise, and supports Azure AD single sign-on for enterprise identity management."},
+    {"q": "How does it handle OSHA recordkeeping?", "a": "Incidents can be classified against OSHA recordability criteria and summarized in OSHA 300, 300A and 301 style logs, alongside local formats such as RIDDOR."}
+  ],
+  "cta": {"title": "See your OHS program in one place", "text": "Get a walkthrough configured around your sites, risk matrix and reporting needs.", "button": "Book a Demo"}
+}

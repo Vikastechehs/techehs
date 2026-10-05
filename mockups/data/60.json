@@ -1,0 +1,125 @@
+{
+  "no": 60,
+  "path": "animated-safety-videos",
+  "type": "Animation",
+  "template": "hub",
+  "meta_title": "Animated Safety Videos | 2D & 3D Safety Animation | TECH EHS",
+  "meta_description": "2D and 3D safety animation for inductions, SOPs, incident recreation and technical training, scripted by EHS experts and voiced in 40+ languages for your sites.",
+  "nav_label": "Animated Safety Videos",
+  "eyebrow": "Safety Animation Studio",
+  "h1": "Safety videos your workforce watches, understands and remembers",
+  "definition": "TECH EHS animated safety videos are custom 2D and 3D animations, scripted by EHS specialists, that explain hazards, procedures, incidents and site rules visually so workers of any language or literacy level can understand and follow them.",
+  "hero_sub": "We turn your SOPs, incident reports and site rules into short animated films, recreating your actual plant, equipment and PPE without stopping production for a film crew.",
+  "hero_bullets": ["Scripts written by EHS professionals", "Voiceover in 40+ languages*", "2D, 3D and mixed-media styles"],
+  "primary_cta": "Request Sample Video",
+  "secondary_cta": "View Video Gallery",
+  "hero_visual": {
+    "kind": "video",
+    "title": "Confined Space Entry – 3D Animation",
+    "kpis": [{"label": "Duration", "value": "3:15"}, {"label": "Languages", "value": "6*"}, {"label": "Style", "value": "3D"}],
+    "rows": [
+      {"title": "Scene 1 – Permit and gas test", "status": "Approved"},
+      {"title": "Scene 2 – Entry and attendant role", "status": "Approved"},
+      {"title": "Scene 3 – Rescue arrangements", "status": "Pending"},
+      {"title": "Arabic voiceover", "status": "Draft"}
+    ]
+  },
+  "stats": [{"value": "17+", "label": "Years in EHS"}, {"value": "40+*", "label": "Voiceover languages"}, {"value": "500+*", "label": "Videos produced"}, {"value": "2", "label": "Offices: India and USA"}],
+  "problem": {
+    "title": "Why classroom slides and long manuals don't change behavior",
+    "intro": "Most frontline safety communication still relies on text-heavy procedures and presentations delivered in one language. Workers sign attendance sheets, but the message rarely reaches the task.",
+    "points": [
+      {"title": "Multilingual, mixed-literacy workforces", "text": "Contract crews on a single site may speak five or more languages, and a written procedure in English protects few of them."},
+      {"title": "Hazards you cannot film", "text": "Toxic releases, arc flash, falls and confined space engulfment cannot be shown safely with a camera, so they are explained in words instead of shown."},
+      {"title": "Lessons from incidents fade fast", "text": "Investigation reports are filed and forgotten, and the same failure repeats at another site because nobody saw how it actually happened."}
+    ]
+  },
+  "features_title": "What our safety animation studio produces",
+  "features_intro": "Every project is scripted by people who have worked in EHS, reviewed by your subject matter experts and built around your own sites, equipment and procedures.",
+  "features": [
+    {"icon": "layers", "title": "2D and 3D safety animation", "text": "Choose clean 2D motion graphics for rules and concepts, or detailed 3D for equipment, plant layouts and step-by-step tasks, or combine both in one film."},
+    {"icon": "alert", "title": "Incident and near miss recreation", "text": "Rebuild an incident from the investigation report, showing the sequence of events, failed barriers and root causes without naming individuals."},
+    {"icon": "file", "title": "SOP and work instruction videos", "text": "Convert standard operating procedures into short task videos that show each step, critical control and PPE requirement in the right order."},
+    {"icon": "users", "title": "Induction for employees, contractors and visitors", "text": "Site-specific induction films covering site rules, emergency routes, assembly points and restricted areas, ready to plug into your induction system."},
+    {"icon": "globe", "title": "Multilingual voiceover and subtitles", "text": "Professional voice artists and translated on-screen text in 40+ languages*, including Hindi, Arabic, Tagalog, Bengali, Spanish and Portuguese."},
+    {"icon": "play", "title": "LMS-ready delivery", "text": "Delivered as MP4 for screens and toolbox talks, or packaged as SCORM with quiz questions so completions are tracked in your LMS."}
+  ],
+  "steps_title": "Our production process",
+  "steps": [
+    {"title": "Brief and script", "text": "We review your procedures, incident reports and site photos, then an EHS scriptwriter drafts the narration and learning objectives for your approval."},
+    {"title": "Storyboard and style frames", "text": "Each scene is sketched with characters, equipment and camera angles, and you sign off the look before any animation starts."},
+    {"title": "Animation and voiceover", "text": "Our 2D and 3D artists build the scenes and recreate your site, while voice artists record the narration in each language you need."},
+    {"title": "Review, revise and deliver", "text": "You review a full draft with timestamped comments, we apply revisions, and final files are delivered as MP4, SCORM or both."}
+  ],
+  "outcomes_title": "What clients typically see after switching to animation",
+  "outcomes": [
+    {"metric": "2x*", "label": "Better knowledge retention", "text": "Visual demonstrations of hazards stay with workers longer than slides or verbal briefings."},
+    {"metric": "40%*", "label": "Shorter induction time", "text": "A 10-minute animated induction replaces a much longer classroom session for visitors and contractors."},
+    {"metric": "60%*", "label": "Lower cost than live filming", "text": "No shutdowns, film crews, actors or permits needed to show high-hazard scenarios."}
+  ],
+  "standards_title": "Content aligned with the standards your training must meet",
+  "standards": ["ISO 45001:2018 (Clause 7.2 Competence, 7.3 Awareness)", "ANSI/ASSP Z490.1", "OSHA 29 CFR 1910 General Industry", "OSHA 29 CFR 1926 Construction", "UK HSE HSG65", "GHS Rev.10", "IOGP Report 459"],
+  "comparison": {
+    "title": "Animation vs. live-action safety filming",
+    "cols": ["Live-action filming", "TECH EHS Safety Animation"],
+    "rows": [
+      ["Showing hazardous events", "Cannot safely stage fires, falls or releases", "Any scenario shown accurately and safely"],
+      ["Disruption to operations", "Crews, lighting and permits on a live site", "Built from photos, drawings and CAD with no site downtime"],
+      ["Inside equipment and processes", "Camera sees only the outside", "Cutaways show internal flows, pressures and failure points"],
+      ["Updating content", "Reshoot when procedures or PPE change", "Edit the affected scene and re-render"],
+      ["Multiple languages", "Lip sync mismatches and subtitles only", "Native voiceover per language with matching on-screen text"],
+      ["Privacy and consent", "Releases needed for every person filmed", "Generic characters, no personal data on screen"]
+    ]
+  },
+  "sections": [
+    {
+      "kind": "cards",
+      "id": "services",
+      "title": "Animation services",
+      "intro": "Pick the type of film you need, or combine several into a training series for one site or program.",
+      "items": [
+        {"icon": "users", "title": "Induction: employee, contractor, visitor", "text": "Site rules, emergency response and restricted areas explained before anyone walks through the gate.", "link": "animated-safety-videos/induction-employee-contractor-visitor"},
+        {"icon": "alert", "title": "Incident and near miss recreation", "text": "Turn investigation findings into a film that shows what happened and which barriers failed.", "link": "animated-safety-videos/incident-near-miss-recreation"},
+        {"icon": "book", "title": "Technical subject training", "text": "Explain topics like electrical safety, process safety or rigging with clear visual models.", "link": "animated-safety-videos/technical-subject-training"},
+        {"icon": "shield", "title": "Critical safety guidelines", "text": "Life-saving rules and golden rules presented as short, memorable films for every worker.", "link": "animated-safety-videos/critical-safety-guidelines"},
+        {"icon": "clipboard", "title": "Standard operating procedures", "text": "Step-by-step task videos that match your written SOPs and highlight critical controls.", "link": "animated-safety-videos/standard-operating-procedure"},
+        {"icon": "leaf", "title": "Social impact", "text": "Community awareness, CSR and public safety campaigns for audiences outside the fence line.", "link": "animated-safety-videos/social-impact"},
+        {"icon": "cog", "title": "Engineering process", "text": "Animated process flows, machine operations and plant systems for engineers and operators.", "link": "animated-safety-videos/engineering-process"},
+        {"icon": "award", "title": "Corporate branding", "text": "Company profiles, safety culture messages and leadership communication in your brand style.", "link": "animated-safety-videos/corporate-branding"},
+        {"icon": "building", "title": "Plant and facility walkthrough", "text": "A 3D tour of your facility showing layout, hazards, routes and muster points.", "link": "animated-safety-videos/plant-facility-walkthrough"},
+        {"icon": "message", "title": "HR onboarding", "text": "Policies, code of conduct and first-day information for new joiners across locations.", "link": "animated-safety-videos/hr-onboarding"}
+      ]
+    },
+    {
+      "kind": "catalog",
+      "id": "samples",
+      "title": "Sample videos",
+      "intro": "A selection of the kinds of films we produce. Request a sample link for any of them.",
+      "items": [
+        {"title": "Hot Work Fire Watch Responsibilities", "tag": "Critical safety guidelines", "meta": "2:40 · 3D · Hindi/English/Arabic", "text": "Shows the fire watch role before, during and 30 minutes after hot work, including spark travel and extinguisher placement."},
+        {"title": "H2S Release at a Wellhead: What Went Wrong", "tag": "Incident recreation", "meta": "4:10 · 3D · English/Arabic", "text": "Recreates a sour gas exposure sequence, the missed alarms and the barriers that would have prevented it."},
+        {"title": "Contractor Site Induction", "tag": "Induction", "meta": "8:30 · 2D · English/Hindi/Tamil/Bengali", "text": "Covers site rules, PPE, permit requirements, emergency alarms and assembly points for new contractor workers."},
+        {"title": "Lockout/Tagout in Six Steps", "tag": "SOP", "meta": "3:20 · 3D · English/Spanish", "text": "Walks through preparation, shutdown, isolation, lock application, stored energy release and verification."},
+        {"title": "Working Safely at Height on Scaffolds", "tag": "Technical training", "meta": "5:00 · 3D · English/Tagalog/Urdu", "text": "Explains scaffold tags, harness inspection, anchor selection and how a fall arrest system works."},
+        {"title": "Chemical Plant 3D Walkthrough", "tag": "Facility walkthrough", "meta": "6:15 · 3D · English/Gujarati", "text": "A virtual tour of a process plant showing hazardous zones, safety showers, escape routes and muster points."}
+      ]
+    },
+    {
+      "kind": "logos",
+      "id": "clients",
+      "title": "Trusted by safety teams in high-hazard industries",
+      "items": [{"title": "Gulf Keystone"}, {"title": "Gujarat Fluorochemicals"}, {"title": "ACG"}, {"title": "Rubis"}, {"title": "JK Cement"}, {"title": "NatSteel"}, {"title": "Sembcorp"}, {"title": "Jindal Steel"}]
+    }
+  ],
+  "testimonial": {"quote": "Our contractor workforce speaks at least six languages. The animated induction in each of them did more for understanding of our site rules than years of classroom briefings.", "name": "[Client name]", "role": "HSE Training Manager", "company": "[Client company], Chemical"},
+  "related": ["animated-safety-videos/video-gallery", "animated-safety-videos/animation-case-studies", "animated-safety-videos/about-animation", "hse-elearning"],
+  "faqs": [
+    {"q": "What are animated safety videos?", "a": "They are short 2D or 3D animated films that explain hazards, procedures, site rules or incidents visually, so workers can see what to do and why without relying on written text."},
+    {"q": "Should we choose 2D or 3D animation?", "a": "2D suits rules, concepts and behavioral messages and is faster to produce. 3D suits equipment, plant layouts and tasks where workers need to recognize the real environment. Many projects mix both."},
+    {"q": "How long does a typical safety animation take to produce?", "a": "A 2 to 4 minute video usually takes 3 to 6 weeks* from approved brief to final delivery, depending on 3D complexity, number of languages and review cycles."},
+    {"q": "Can you recreate our actual site and equipment?", "a": "Yes. We build scenes from your photos, drawings, P&IDs or CAD models, and match your PPE, signage, uniforms and color codes."},
+    {"q": "Which languages do you offer for voiceover?", "a": "We offer professional voiceover and subtitles in 40+ languages*, including English, Hindi, Arabic, Spanish, Portuguese, French, Tagalog, Bengali, Tamil and Urdu."},
+    {"q": "Can the videos be tracked in our LMS?", "a": "Yes. Videos can be packaged as SCORM 1.2 or SCORM 2004 with optional quizzes, or delivered through the TECH EHS e-learning and induction platforms."}
+  ],
+  "cta": {"title": "Turn your next procedure into a film people remember", "text": "Send us one SOP, incident report or induction deck and we will propose a script outline, style and timeline.", "button": "Request Sample Video"}
+}
