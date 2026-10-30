@@ -1,0 +1,18 @@
+{
+  "name": "pagepress-extension",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-vendor.cjs",
+    "test": "node --test tests/core.test.cjs tests/licensing.test.cjs",
+    "test:browser": "node tests/browser.test.cjs"
+  },
+  "dependencies": {
+    "fflate": "0.8.3",
+    "html2canvas": "1.4.1",
+    "jspdf": "^4.0.0"
+  },
+  "devDependencies": {
+    "pdfjs-dist": "^6.4.299"
+  }
+}
