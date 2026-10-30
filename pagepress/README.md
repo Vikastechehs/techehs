@@ -46,6 +46,8 @@ One capture is retained at a time. Limit: 200 requested document pages, approxim
 
 The adapter targets website PDF.js-style viewers with `.page[data-page-number]` canvases and standard `pageNumber`, `numPages`, and `scaleSelect` controls. Both continuous and single-page/lazy-loading layouts are supported. Same-origin embedded viewers are detected when accessible.
 
+If a viewer has no `scaleSelect` zoom control, PagePress cannot switch it to 200%/300% and captures the canvas at the viewer's current zoom (still subject to the 1,200-pixel minimum). If a viewer caps its canvas below the sheet's displayed size, PagePress waits for a full render, then keeps the native pixels without upscaling and marks that sheet **Review** with the actual pixel width.
+
 Chrome's built-in PDF viewer, arbitrary image galleries, document viewers inside inaccessible cross-origin frames, canvas content blocked by browser origin rules, and protected viewers that do not expose readable rendered pages are not supported. Viewers that cap the full-sheet canvas below 1,200 pixels and render only a small viewport detail layer are also unsupported; PagePress stops instead of exporting an upscaled blurry image. Open an embedded document in its own website viewer tab where possible. The extension does not bypass browser security, request official downloads, or retrieve hidden source documents.
 
 The Bihar viewer DOM and controls were inspected during implementation, and its first page exposed a 1,980 x 2,805 native canvas at 200% zoom. A live installed-extension smoke test on the user's exact Bihar document is still needed; automated fixture results do not establish compatibility with every portal version or every third-party viewer.
@@ -65,9 +67,9 @@ No permanent all-sites host permission is requested. Website requests normally n
 
 ## Development
 
-```powershell
+```bash
 cd pagepress
-npm install
+npm ci
 npm run build
 npm test
 npm run test:browser

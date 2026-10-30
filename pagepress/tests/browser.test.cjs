@@ -2,8 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
-const runtime = 'C:/Program Files/WindowsApps/OpenAI.CodexPrimaryRuntime.v26-1025-760-0_26.1025.760.0_x64__3k8sg7r9htsxt/dependencies/node/node_modules';
-const { chromium } = require(process.env.PAGEPRESS_PLAYWRIGHT || path.join(runtime, 'playwright'));
+const { chromium } = require(process.env.PAGEPRESS_PLAYWRIGHT || 'playwright');
 
 async function main() {
   const unconfigured = process.argv.includes('--unconfigured');
@@ -15,6 +14,10 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json')));
   manifest.host_permissions = ['http://127.0.0.1/*', 'https://api.lemonsqueezy.com/*'];
   fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest));
+  // Small parts make every test page cross the multi-message transfer path used for very large sheets.
+  const captureFile = path.join(stage, 'capture.js'), captureSource = fs.readFileSync(captureFile, 'utf8');
+  assert.ok(captureSource.includes('const CHUNK_CHARS = 8 * 1048576;'));
+  fs.writeFileSync(captureFile, captureSource.replace('const CHUNK_CHARS = 8 * 1048576;', 'const CHUNK_CHARS = 64 * 1024;'));
   if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ provider: 'lemonsqueezy', storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$19/year' }) + ');');
   const { jsPDF } = require('jspdf');
   const realPdf = new jsPDF({ unit: 'pt', format: 'a4' });
@@ -48,8 +51,7 @@ async function main() {
   const realOnly = process.argv.includes('--real-only');
   let captured = [], restored = null, resumedNumbers = [];
   try {
-    let executablePath = process.env.PAGEPRESS_CHROMIUM || chromium.executablePath();
-    if (!fs.existsSync(executablePath)) executablePath = 'C:/Users/gaura/AppData/Local/ms-playwright/chromium-1228/chrome-win64/chrome.exe';
+    const executablePath = process.env.PAGEPRESS_CHROMIUM || chromium.executablePath();
     context = await chromium.launchPersistentContext(path.join(stage, 'profile'), {
       executablePath, headless: true, ignoreDefaultArgs: ['--disable-extensions'],
       args: [`--disable-extensions-except=${stage}`, `--load-extension=${stage}`], viewport: { width: 1280, height: 940 }
@@ -257,6 +259,8 @@ async function main() {
     await ui.locator('#from').fill('1'); await ui.locator('#to').fill('6');
     await ui.locator('#filename').fill('pagepress-real-pdfjs.pdf');
     await ui.locator('#capture').click(); if (!realOnly) await ui.locator('button[value="confirm"]').click();
+    // The previous scenario leaves "Needs attention" displayed; wait for this run to start before awaiting its outcome.
+    await ui.waitForFunction(() => document.getElementById('state').textContent === 'Capturing', null, { timeout: 30000 });
     await source.bringToFront();
     if (realOnly) {
       await new Promise((resolve) => setTimeout(resolve, 2500));

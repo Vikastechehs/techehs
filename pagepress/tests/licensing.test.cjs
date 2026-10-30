@@ -14,7 +14,7 @@ function harness(options = {}) {
       const action = url.split('/').pop(); calls.push({ action, url, init, params: Object.fromEntries(new URLSearchParams(init.body)) });
       if (options.networkError) throw new TypeError('Network unavailable');
       const data = response(action); options.mutate?.(data, action);
-      return { ok: options.httpOk !== false, status: options.status || 200, json: async () => data };
+      return { ok: options.httpOk !== false, status: options.status || 200, json: async () => { if (options.html) throw new SyntaxError('Unexpected token <'); return data; } };
     } });
   return { client, values, calls };
 }
@@ -95,4 +95,12 @@ test('invalid ranges and incomplete activation forms fail before any API request
   for (const count of [0, 201, 2.5, '21', NaN]) await assert.rejects(h.client.authorize(count));
   await assert.rejects(h.client.activate('', email)); await assert.rejects(h.client.activate(key, 'not-email'));
   assert.equal(h.calls.length, 0);
+});
+test('unreadable provider responses keep Free and the saved license with a clear message', async () => {
+  const h = harness({ values: saved(), html: true, httpOk: false, status: 502 });
+  const status = await h.client.refresh();
+  assert.equal(status.plan, 'free');
+  assert.match(status.error, /HTTP 502/);
+  assert.ok(h.values[STORAGE_KEY]);
+  await assert.rejects(harness({ html: true }).client.activate(key, email), /unreadable response/);
 });

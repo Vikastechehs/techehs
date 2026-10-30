@@ -34,7 +34,9 @@
           method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams(params).toString(), signal: controller.signal, credentials: 'omit', cache: 'no-store', redirect: 'error'
         });
-        const data = await response.json();
+        let data;
+        try { data = await response.json(); } catch { data = null; }
+        if (!data || typeof data !== 'object') throw new Error(response.ok ? 'The license service returned an unreadable response. Try again later.' : `License service error (HTTP ${response.status}). Try again later. Free captures remain available.`);
         if (!response.ok) throw new Error(response.status === 429 ? 'Too many license requests. Please wait a minute.' : data.error || 'License verification failed.');
         return data;
       } catch (error) {

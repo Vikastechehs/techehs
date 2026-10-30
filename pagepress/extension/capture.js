@@ -1,6 +1,8 @@
 (function () {
   if (globalThis.PagePressCapture) return;
   const CHANNEL = 'pagepress-capture-v1';
+  // Extension messages are capped at 64 MiB, so large PNG data URLs are sent in parts.
+  const CHUNK_CHARS = 8 * 1048576;
   let running = null;
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   function findViewer(doc = document, depth = 0) {
@@ -59,13 +61,17 @@
       check(job);
       const page = found.viewer.querySelector(`.page[data-page-number="${number}"]`);
       const canvas = page?.querySelector('canvas');
-      const ready = page && canvas?.width >= 1200 && canvas.height > 0 && page.getAttribute('data-loaded') === 'true';
+      const loaded = page && canvas?.width >= 1200 && canvas.height > 0 && page.getAttribute('data-loaded') === 'true';
+      // A canvas smaller than its displayed size is either a stale render being CSS-stretched during a zoom
+      // change or a viewer-imposed canvas cap. Wait for the full render; accept a capped canvas only later, flagged.
+      const sharp = loaded && canvas.width >= Math.floor(canvas.getBoundingClientRect().width * (canvas.ownerDocument.defaultView.devicePixelRatio || 1) * 0.97);
+      const ready = loaded && (sharp || performance.now() - start > job.config.timeoutMs / 2);
       if (ready) {
         let probe;
         try { probe = fingerprint(canvas); } catch { throw new Error(`Page ${number} cannot be read because the site restricts canvas access.`); }
         const signature = probe.signature + ':' + page.childElementCount;
         if (last !== signature) { last = signature; stableAt = performance.now(); }
-        if (performance.now() - stableAt >= job.config.settleMs) return { page, canvas, blank: probe.blank };
+        if (performance.now() - stableAt >= job.config.settleMs) return { page, canvas, blank: probe.blank, reduced: !sharp };
       } else { last = ''; stableAt = performance.now(); }
       await sleep(150);
     }
@@ -120,7 +126,7 @@
     } finally { page.removeAttribute('data-pagepress-target'); }
   }
   async function capturePage(found, number, job) {
-    const { page, canvas: source, blank } = await waitForPage(found, number, job);
+    const { page, canvas: source, blank, reduced } = await waitForPage(found, number, job);
     check(job);
     const rect = source.getBoundingClientRect();
     if (source.width < 1200) throw new Error(`Page ${number} did not render at the requested resolution. Increase the viewer zoom or retry after it finishes zooming.`);
@@ -135,7 +141,8 @@
     check(job);
     if (!found.viewer.contains(page) || Number(page.dataset.pageNumber) !== number) throw new Error('The viewer changed pages during capture.');
     const text = page.textContent;
-    const warning = /not available|unavailable|उपलब्ध\s*नहीं/i.test(text) ? 'The source viewer reports unavailable content.' : blank ? 'This source page appears blank.' : '';
+    const warning = /not available|unavailable|उपलब्ध\s*नहीं/i.test(text) ? 'The source viewer reports unavailable content.' : blank ? 'This source page appears blank.' :
+      reduced ? `The viewer rendered this sheet below its displayed size (${source.width.toLocaleString()} px wide). It was kept at native resolution, not upscaled.` : '';
     let data;
     try { data = output.toDataURL('image/png'); } catch { throw new Error(`Page ${number} has protected or cross-origin content and cannot be exported.`); }
     if (!data.startsWith('data:image/png;base64,')) throw new Error('The browser could not allocate a page image. Retry at 200% quality.');
@@ -157,8 +164,13 @@
         await notify(job, 'progress', { number, phase: 'loading' });
         navigate(found, number);
         await sleep(180);
-        const captured = await capturePage(found, number, job);
-        await notify(job, 'page', { page: captured });
+        const { data, ...captured } = await capturePage(found, number, job);
+        const parts = Math.ceil(data.length / CHUNK_CHARS);
+        for (let index = 0; index < parts; index++) {
+          check(job);
+          await notify(job, 'chunk', { number, index, parts, data: data.slice(index * CHUNK_CHARS, (index + 1) * CHUNK_CHARS) });
+        }
+        await notify(job, 'page', { page: { ...captured, parts } });
         check(job);
       }
     } catch (error) { failure = error.message; }

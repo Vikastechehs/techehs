@@ -1,6 +1,6 @@
 # Enable PagePress payments
 
-Version 0.3 includes Free/Pro plans, hosted checkout, license activation and validation, subscription management, and browser deactivation. The distributed build starts in Free mode. No seller account or checkout was supplied, so purchases and activation are visibly unavailable until you configure your real store. There is no bundled master key, test entitlement, or pretend payment success.
+Version 0.3.1 includes Free/Pro plans, hosted checkout, license activation and validation, subscription management, and browser deactivation. The distributed build starts in Free mode. No seller account or checkout was supplied, so purchases and activation are visibly unavailable until you configure your real store. There is no bundled master key, test entitlement, or pretend payment success.
 
 ## Plans
 
@@ -29,7 +29,7 @@ The script writes `extension/billing-config.js`. No secret API key is needed or 
 If you only extracted the extension ZIP, edit those four public settings directly in `extension/billing-config.js`: replace the three `null` IDs with numbers and the empty checkout URL with your hosted URL. The CLI script is available in the full workspace source.
 
 6. Reload the unpacked extension in Chrome. Test with the provider's test product and license, configuring that product's correct public IDs first. Exercise successful checkout, receipt delivery, matching email, activation, verification, activation limits, cancellation at period end, expiration/disable, renewal, and deactivation. Then configure the live product and live checkout, verify their displayed price and policies, and complete a live smoke test before selling publicly. This repository's mocked tests do not establish that your merchant checkout or payouts work.
-7. Repackage after configuration; do not distribute the old unconfigured ZIP:
+7. Repackage after configuration; do not distribute the old unconfigured ZIP. On macOS/Linux, from the repository root: `rm -f pagepress-extension.zip && zip -r -X pagepress-extension.zip pagepress/extension pagepress/README.md pagepress/PRIVACY.md pagepress/BILLING-SETUP.md`. On Windows:
 
 ```powershell
 cd ..

@@ -5,7 +5,7 @@
   const CHANNEL = 'pagepress-capture-v1';
   const enabled = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
   let source = null, sourceTabId = null, job = null, pages = [], busy = false, detecting = false;
-  let download = null, activity = [], authorizing = false;
+  let download = null, activity = [], authorizing = false, incoming = null;
   const stateNames = { ready: 'Ready', capturing: 'Capturing', captured: 'Captured', building: 'Preparing file', downloading: 'Saving', complete: 'Saved', failed: 'Needs attention', cancelled: 'Stopped' };
   function notice(text, error = false) { $('notice').textContent = text; $('notice').hidden = !text; $('notice').classList.toggle('error', error); }
   function log(text) {
@@ -139,8 +139,18 @@
       $('progress-detail').textContent = `Loading page ${message.number} of ${job.total}...`;
       return;
     }
+    if (message.type === 'chunk') {
+      if (message.index === 0) incoming = { number: message.number, parts: message.parts, chunks: [], length: 0 };
+      if (!incoming || incoming.number !== message.number || incoming.parts !== message.parts || message.index !== incoming.chunks.length || typeof message.data !== 'string') { incoming = null; throw new Error('The viewer returned an incomplete page image.'); }
+      incoming.length += message.data.length;
+      if (incoming.length * .75 > 150 * 1048576) { incoming = null; throw new Error('Capture reached the 150 MB limit. Use a smaller page range or 200% quality.'); }
+      incoming.chunks.push(message.data);
+      return;
+    }
     if (message.type === 'page') {
-      const page = message.page;
+      const { parts, ...page } = message.page;
+      if (!incoming || incoming.number !== page.number || incoming.parts !== parts || incoming.chunks.length !== parts) { incoming = null; throw new Error('The viewer returned an incomplete page image.'); }
+      page.data = incoming.chunks.join(''); incoming = null;
       if (!Number.isInteger(page.number) || page.number < job.from || page.number > job.to || !page.data?.startsWith('data:image/png;base64,') || !(page.width > 0 && page.height > 0)) throw new Error('The viewer returned an invalid page image.');
       const bytes = Math.round(page.data.length * .75);
       if (pages.filter((p) => p.number !== page.number).reduce((sum, p) => sum + p.bytes, bytes) > 150 * 1048576) throw new Error('Capture reached the 150 MB limit. Use a smaller page range or 200% quality.');
@@ -154,7 +164,7 @@
       return;
     }
     if (message.type === 'finished') {
-      busy = false;
+      busy = false; incoming = null;
       const missing = core.missingPages(job, pages);
       job.status = message.cancelled ? 'cancelled' : message.error || missing.length ? 'failed' : 'captured';
       job.error = message.error || (missing.length ? 'The capture did not include every requested page.' : '');
@@ -164,7 +174,7 @@
     }
   }
   if (enabled) chrome.runtime.onMessage.addListener((message, sender, respond) => {
-    if (message.channel !== CHANNEL || !['page', 'progress', 'finished'].includes(message.type)) return;
+    if (message.channel !== CHANNEL || !['chunk', 'page', 'progress', 'finished'].includes(message.type)) return;
     receive(message, sender).then(() => {
       respond({ ok: true });
       if (message.type === 'finished' && job?.status === 'captured') void saveOutput();
