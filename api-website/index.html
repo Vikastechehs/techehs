@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Techehs API — Real-time B2B Data API for Profiles, Companies & Jobs</title>
+  <meta name="description" content="Real-time B2B data API. Fetch profiles, companies, jobs and posts with a simple REST call. No cookies, no accounts, pay only for successful results.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="home">
+  <header id="site-header" class="site-header"></header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <span class="eyebrow">Real-time B2B data API</span>
+          <h1>Professional data,<br><span class="grad">one API call away</span></h1>
+          <p class="lead">Fetch live profiles, companies, job listings and posts in under two seconds. No cookies, no accounts to manage, no proxies to maintain. You only pay for successful results.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="signup.html">Get free API key →</a>
+            <a class="btn btn-outline" href="docs.html">Read the docs</a>
+          </div>
+          <div class="hero-badges">
+            <span>100 free credits</span>
+            <span>No credit card</span>
+            <span>Live data, never cached</span>
+          </div>
+        </div>
+
+        <div class="code-window" aria-label="Code example">
+          <div class="code-tabs">
+            <div class="dots"><i></i><i></i><i></i></div>
+            <button class="code-tab active" data-tab="curl">cURL</button>
+            <button class="code-tab" data-tab="node">Node.js</button>
+            <button class="code-tab" data-tab="python">Python</button>
+            <button class="code-tab" data-tab="res">Response</button>
+            <button class="copy-btn">Copy</button>
+          </div>
+<pre class="code-pane active" data-pane="curl"><span class="tok-f">curl</span> <span class="tok-s">"https://api.techehs.com/v1/profile?url=https://linkedin.com/in/janedoe"</span> \
+  -H <span class="tok-s">"X-API-Key: YOUR_API_KEY"</span></pre>
+<pre class="code-pane" data-pane="node"><span class="tok-k">const</span> res = <span class="tok-k">await</span> <span class="tok-f">fetch</span>(
+  <span class="tok-s">"https://api.techehs.com/v1/profile?url=https://linkedin.com/in/janedoe"</span>,
+  { headers: { <span class="tok-s">"X-API-Key"</span>: process.env.TECHEHS_API_KEY } }
+);
+<span class="tok-k">const</span> { element } = <span class="tok-k">await</span> res.<span class="tok-f">json</span>();
+console.<span class="tok-f">log</span>(element.firstName, element.headline);</pre>
+<pre class="code-pane" data-pane="python"><span class="tok-k">import</span> os, requests
+
+r = requests.<span class="tok-f">get</span>(
+    <span class="tok-s">"https://api.techehs.com/v1/profile"</span>,
+    params={<span class="tok-s">"url"</span>: <span class="tok-s">"https://linkedin.com/in/janedoe"</span>},
+    headers={<span class="tok-s">"X-API-Key"</span>: os.environ[<span class="tok-s">"TECHEHS_API_KEY"</span>]},
+)
+<span class="tok-f">print</span>(r.<span class="tok-f">json</span>()[<span class="tok-s">"element"</span>][<span class="tok-s">"headline"</span>])</pre>
+<pre class="code-pane" data-pane="res">{
+  <span class="tok-p">"status"</span>: <span class="tok-s">"ok"</span>,
+  <span class="tok-p">"element"</span>: {
+    <span class="tok-p">"publicIdentifier"</span>: <span class="tok-s">"janedoe"</span>,
+    <span class="tok-p">"firstName"</span>: <span class="tok-s">"Jane"</span>,
+    <span class="tok-p">"lastName"</span>: <span class="tok-s">"Doe"</span>,
+    <span class="tok-p">"headline"</span>: <span class="tok-s">"Head of Growth at Acme"</span>,
+    <span class="tok-p">"location"</span>: <span class="tok-s">"Berlin, Germany"</span>,
+    <span class="tok-p">"connections"</span>: <span class="tok-n">500</span>,
+    <span class="tok-p">"experience"</span>: [ <span class="tok-c">/* ... */</span> ]
+  },
+  <span class="tok-p">"query"</span>: { <span class="tok-p">"url"</span>: <span class="tok-s">"https://linkedin.com/in/janedoe"</span> },
+  <span class="tok-p">"creditsUsed"</span>: <span class="tok-n">2</span>
+}</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="trust">
+      <div class="container stats">
+        <div class="stat"><b>&lt;2s</b><span>Median response time</span></div>
+        <div class="stat"><b>99.9%</b><span>API uptime</span></div>
+        <div class="stat"><b>50M+</b><span>Requests served monthly</span></div>
+        <div class="stat"><b>$0.004</b><span>Per profile, from</span></div>
+      </div>
+    </section>
+
+    <!-- Products -->
+    <section class="section" id="products">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Products</span>
+          <h2>Every data point you need, in clean JSON</h2>
+          <p class="lead">Six focused endpoints that cover people, companies, hiring and content. Same auth, same response shape, same simple pricing.</p>
+        </div>
+        <div class="grid-3">
+          <div class="card">
+            <div class="icon">👤</div>
+            <h3>Profile API</h3>
+            <p>Full profile by URL or public ID: headline, experience, education, skills, certifications and contact signals.</p>
+            <div class="price-tag">from <em>$0.004</em> / profile</div>
+            <a class="card-link" href="docs.html#profile">View endpoint →</a>
+          </div>
+          <div class="card">
+            <div class="icon">🏢</div>
+            <h3>Company API</h3>
+            <p>Company details by URL or domain: size, industry, HQ, specialties, follower count and employee growth.</p>
+            <div class="price-tag">from <em>$0.004</em> / company</div>
+            <a class="card-link" href="docs.html#company">View endpoint →</a>
+          </div>
+          <div class="card">
+            <div class="icon">💼</div>
+            <h3>Jobs API</h3>
+            <p>Search live job listings by keyword, location, company, seniority and date posted. Full job descriptions included.</p>
+            <div class="price-tag">from <em>$0.002</em> / job</div>
+            <a class="card-link" href="docs.html#jobs">View endpoint →</a>
+          </div>
+          <div class="card">
+            <div class="icon">📝</div>
+            <h3>Posts API</h3>
+            <p>Recent posts from any profile or company page with reactions, comments counts, media and timestamps.</p>
+            <div class="price-tag">from <em>$0.002</em> / post</div>
+            <a class="card-link" href="docs.html#posts">View endpoint →</a>
+          </div>
+          <div class="card">
+            <div class="icon">🔍</div>
+            <h3>People Search API</h3>
+            <p>Find people by title, company, location, industry and more. Paginated results with short profile previews.</p>
+            <div class="price-tag">from <em>$0.01</em> / page</div>
+            <a class="card-link" href="docs.html#search">View endpoint →</a>
+          </div>
+          <div class="card">
+            <div class="icon">✉️</div>
+            <h3>Email Finder</h3>
+            <p>Find and verify professional email addresses from a profile URL or name + company domain.</p>
+            <div class="price-tag">from <em>$0.01</em> / found email</div>
+            <a class="card-link" href="docs.html#email">View endpoint →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Why -->
+    <section class="section soft" id="features">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Why Techehs API</span>
+          <h2>Built for developers who ship</h2>
+          <p class="lead">We handle the infrastructure, retries and parsing so you can focus on your product.</p>
+        </div>
+        <div class="grid-3">
+          <div class="card"><div class="icon">⚡</div><h3>Real-time, not stale</h3><p>Every request fetches fresh data at call time. No week-old database dumps.</p></div>
+          <div class="card"><div class="icon">🔐</div><h3>No cookies or accounts</h3><p>You never share credentials or risk your own accounts. One API key is all you need.</p></div>
+          <div class="card"><div class="icon">💸</div><h3>Pay per success</h3><p>Failed or empty requests are free. Credits never expire on paid plans.</p></div>
+          <div class="card"><div class="icon">📈</div><h3>Scales with you</h3><p>Up to 50 concurrent requests on Business plans and custom limits on Enterprise.</p></div>
+          <div class="card"><div class="icon">🧩</div><h3>Consistent JSON</h3><p>Typed, documented response schemas that stay the same across endpoints.</p></div>
+          <div class="card"><div class="icon">🛟</div><h3>Human support</h3><p>Talk to engineers, not bots. Median first response under 2 hours.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section">
+      <div class="container grid-2" style="align-items:center;gap:56px">
+        <div>
+          <span class="eyebrow">How it works</span>
+          <h2>From sign-up to first result in 60 seconds</h2>
+          <div class="steps" style="display:grid;gap:28px;margin-top:28px">
+            <div class="step"><h3>Create a free account</h3><p class="muted">Sign up with your email. You get 100 free credits instantly, no card required.</p></div>
+            <div class="step"><h3>Copy your API key</h3><p class="muted">Find it in your dashboard and send it in the <code>X-API-Key</code> header.</p></div>
+            <div class="step"><h3>Make your first call</h3><p class="muted">Pass a URL or search query and receive structured JSON in under two seconds.</p></div>
+          </div>
+        </div>
+        <div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/profile</code><span class="desc">Profile by URL</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/company</code><span class="desc">Company by URL or domain</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/jobs/search</code><span class="desc">Search job listings</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/job</code><span class="desc">Job details by ID</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/posts</code><span class="desc">Posts by profile or company</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/people/search</code><span class="desc">Search people</span></div>
+          <div class="endpoint"><span class="method post">POST</span><code>/v1/email/find</code><span class="desc">Find work email</span></div>
+          <div class="endpoint"><span class="method">GET</span><code>/v1/account</code><span class="desc">Credits &amp; usage</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Use cases -->
+    <section class="section soft">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Use cases</span>
+          <h2>What teams build with it</h2>
+        </div>
+        <div class="grid-4">
+          <div class="card"><h3>Sales prospecting</h3><p>Build targeted lead lists and enrich CRM records with current titles and companies.</p></div>
+          <div class="card"><h3>Recruiting</h3><p>Source candidates by skills and experience, then track job changes automatically.</p></div>
+          <div class="card"><h3>Market research</h3><p>Monitor hiring trends, headcount growth and competitor job postings.</p></div>
+          <div class="card"><h3>AI agents</h3><p>Give your LLM agents live professional context through a simple tool call.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Integrations -->
+    <section class="section" id="integrations">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Integrations</span>
+          <h2>Works with the tools you already use</h2>
+          <p class="lead">Call it from any language, or plug it into no-code workflows.</p>
+        </div>
+        <div class="grid-4">
+          <div class="card" style="text-align:center"><h3>REST API</h3><p>Any language with HTTP</p></div>
+          <div class="card" style="text-align:center"><h3>Node.js SDK</h3><p><code>npm i @techehs/api</code></p></div>
+          <div class="card" style="text-align:center"><h3>Python SDK</h3><p><code>pip install techehs</code></p></div>
+          <div class="card" style="text-align:center"><h3>MCP server</h3><p>For Claude &amp; AI agents</p></div>
+          <div class="card" style="text-align:center"><h3>Zapier</h3><p>No-code automations</p></div>
+          <div class="card" style="text-align:center"><h3>Make</h3><p>Visual scenarios</p></div>
+          <div class="card" style="text-align:center"><h3>n8n</h3><p>Self-hosted workflows</p></div>
+          <div class="card" style="text-align:center"><h3>Google Sheets</h3><p>Enrich rows in bulk</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="section soft">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Customers</span>
+          <h2>Loved by growth and data teams</h2>
+        </div>
+        <div class="grid-3">
+          <div class="card quote">
+            <div class="stars">★★★★★</div>
+            <p>“We replaced a fragile in-house scraper with three lines of code. Response times are consistently fast and the JSON is clean.”</p>
+            <div class="who"><div class="avatar">AK</div><div><b>Arjun K.</b><span>CTO, sales-intelligence startup</span></div></div>
+          </div>
+          <div class="card quote">
+            <div class="stars">★★★★★</div>
+            <p>“Paying only for successful results made our costs predictable. Enriching 200k leads cost a fraction of our old vendor.”</p>
+            <div class="who"><div class="avatar">ML</div><div><b>Maria L.</b><span>RevOps lead, B2B SaaS</span></div></div>
+          </div>
+          <div class="card quote">
+            <div class="stars">★★★★★</div>
+            <p>“The jobs endpoint powers our hiring-signal alerts. Setup took an afternoon and support answered every question the same day.”</p>
+            <div class="who"><div class="avatar">DS</div><div><b>Daniel S.</b><span>Founder, recruiting platform</span></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">FAQ</span>
+          <h2>Frequently asked questions</h2>
+        </div>
+        <div class="faq">
+          <details open>
+            <summary>How does billing work?</summary>
+            <p>Every successful request costs credits based on the endpoint (see the <a href="pricing.html#rates">rate table</a>). Failed requests, timeouts and empty results are never charged. Buy a monthly plan or a one-off credit pack.</p>
+          </details>
+          <details>
+            <summary>Do I need to provide cookies or an account?</summary>
+            <p>No. You only need your Techehs API key. We never ask for your personal credentials.</p>
+          </details>
+          <details>
+            <summary>Is the data real-time?</summary>
+            <p>Yes. Each request fetches the latest public data at the time of the call. We don't serve results from a stale database.</p>
+          </details>
+          <details>
+            <summary>What are the rate limits?</summary>
+            <p>Concurrency depends on your plan: 2 on Free, 5 on Starter, 15 on Growth, 50 on Business, and custom on Enterprise. See <a href="docs.html#rate-limits">rate limits</a>.</p>
+          </details>
+          <details>
+            <summary>Do unused credits roll over?</summary>
+            <p>On monthly plans, unused credits roll over for one additional month. Credit packs never expire.</p>
+          </details>
+          <details>
+            <summary>Is this compliant with data protection laws?</summary>
+            <p>We only collect publicly available information. You are responsible for using the data in line with GDPR, CCPA and other laws that apply to you. Read our <a href="legal.html#acceptable-use">Acceptable Use Policy</a>.</p>
+          </details>
+          <details>
+            <summary>Can I cancel any time?</summary>
+            <p>Yes. Cancel from your dashboard in one click. Your plan stays active until the end of the billing period.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="cta-band">
+          <h2>Start building in minutes</h2>
+          <p>100 free credits. No credit card. Cancel any time.</p>
+          <div class="hero-actions" style="justify-content:center">
+            <a class="btn btn-primary" href="signup.html" style="background:#fff;color:#1e3a8a">Get free API key</a>
+            <a class="btn btn-outline" href="contact.html">Talk to sales</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+</body>
+</html>

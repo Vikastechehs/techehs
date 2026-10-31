@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign up — Techehs API</title>
+  <meta name="description" content="Create a free Techehs API account and get 100 free credits.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="signup">
+  <header id="site-header" class="site-header"></header>
+
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <h1>Create your account</h1>
+      <p class="muted">100 free credits. No credit card required.</p>
+      <form id="signup-form" novalidate>
+        <div class="field">
+          <label for="name">Full name</label>
+          <input id="name" type="text" autocomplete="name" placeholder="Jane Doe" required>
+          <div class="error">Please enter your name.</div>
+        </div>
+        <div class="field">
+          <label for="email">Work email</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@company.com" required>
+          <div class="error">Please enter a valid email address.</div>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required>
+          <div class="error">Password must be at least 8 characters.</div>
+        </div>
+        <div class="field">
+          <label for="plan">Plan</label>
+          <select id="plan">
+            <option value="free">Free — 100 credits</option>
+            <option value="starter">Starter — $29/mo, 10,000 credits</option>
+            <option value="growth">Growth — $79/mo, 30,000 credits</option>
+            <option value="business">Business — $199/mo, 100,000 credits</option>
+          </select>
+        </div>
+        <label style="display:flex;gap:10px;align-items:flex-start;margin-top:16px;font-size:14px">
+          <input id="terms" type="checkbox" style="margin-top:4px">
+          <span>I agree to the <a href="legal.html#terms">Terms of Service</a> and <a href="legal.html#privacy">Privacy Policy</a>.</span>
+        </label>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:18px">Create account</button>
+        <div class="form-msg" role="alert"></div>
+      </form>
+      <div class="divider">or</div>
+      <p style="text-align:center;font-size:14px">Already have an account? <a href="login.html">Log in</a></p>
+    </div>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+  <script src="assets/auth.js"></script>
+  <script>TechAuth.initSignup(document.getElementById("signup-form"));</script>
+</body>
+</html>

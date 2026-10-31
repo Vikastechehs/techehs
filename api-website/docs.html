@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Documentation — Techehs API</title>
+  <meta name="description" content="Techehs API reference: authentication, endpoints, parameters, responses, errors and rate limits.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="docs">
+  <header id="site-header" class="site-header"></header>
+
+  <main class="container docs-layout">
+    <nav class="docs-nav" aria-label="Documentation">
+      <h5>Getting started</h5>
+      <a href="#introduction">Introduction</a>
+      <a href="#authentication">Authentication</a>
+      <a href="#quickstart">Quickstart</a>
+      <a href="#response-format">Response format</a>
+      <h5>Endpoints</h5>
+      <a href="#profile">Profile</a>
+      <a href="#company">Company</a>
+      <a href="#jobs">Jobs</a>
+      <a href="#posts">Posts</a>
+      <a href="#search">People search</a>
+      <a href="#email">Email finder</a>
+      <a href="#account">Account</a>
+      <h5>Reference</h5>
+      <a href="#errors">Errors</a>
+      <a href="#rate-limits">Rate limits</a>
+      <a href="#sdks">SDKs</a>
+      <a href="#changelog">Changelog</a>
+    </nav>
+
+    <div class="docs-content">
+      <section id="introduction">
+        <span class="eyebrow">API v1</span>
+        <h2>Introduction</h2>
+        <p>The Techehs API is a REST API that returns real-time professional data as JSON. All requests are made over HTTPS to the base URL below.</p>
+        <pre>https://api.techehs.com/v1</pre>
+        <p>Every endpoint uses <code>GET</code> except the email finder, which uses <code>POST</code>. Responses are UTF-8 encoded JSON.</p>
+      </section>
+
+      <section id="authentication">
+        <h2>Authentication</h2>
+        <p>Authenticate by sending your API key in the <code>X-API-Key</code> header. Find your key in the <a href="dashboard.html">dashboard</a>.</p>
+        <pre>curl https://api.techehs.com/v1/account \
+  -H "X-API-Key: YOUR_API_KEY"</pre>
+        <div class="callout warn"><strong>Keep your key secret.</strong> Never expose it in browser code or public repositories. If a key leaks, rotate it from the dashboard immediately.</div>
+      </section>
+
+      <section id="quickstart">
+        <h2>Quickstart</h2>
+        <ol style="padding-left:20px">
+          <li><a href="signup.html">Create a free account</a> — you get 100 credits.</li>
+          <li>Copy your API key from the dashboard.</li>
+          <li>Make your first request:</li>
+        </ol>
+        <div class="code-window" style="margin-top:14px">
+          <div class="code-tabs">
+            <button class="code-tab active" data-tab="q-curl">cURL</button>
+            <button class="code-tab" data-tab="q-node">Node.js</button>
+            <button class="code-tab" data-tab="q-py">Python</button>
+            <button class="copy-btn">Copy</button>
+          </div>
+<pre class="code-pane active" data-pane="q-curl">curl "https://api.techehs.com/v1/company?url=https://linkedin.com/company/acme" \
+  -H "X-API-Key: YOUR_API_KEY"</pre>
+<pre class="code-pane" data-pane="q-node">import { TechehsClient } from "@techehs/api";
+
+const client = new TechehsClient({ apiKey: process.env.TECHEHS_API_KEY });
+const { element } = await client.company({ url: "https://linkedin.com/company/acme" });
+console.log(element.name, element.employeeCount);</pre>
+<pre class="code-pane" data-pane="q-py">from techehs import Client
+
+client = Client(api_key="YOUR_API_KEY")
+company = client.company(url="https://linkedin.com/company/acme")
+print(company["element"]["name"])</pre>
+        </div>
+      </section>
+
+      <section id="response-format">
+        <h2>Response format</h2>
+        <p>Single-item endpoints return an <code>element</code>. List endpoints return <code>elements</code> plus <code>pagination</code>. Every response includes <code>creditsUsed</code>.</p>
+<pre>{
+  "status": "ok",
+  "element": { ... },          // single-item endpoints
+  "elements": [ ... ],         // list endpoints
+  "pagination": {              // list endpoints
+    "page": 1,
+    "pageSize": 25,
+    "totalPages": 8,
+    "totalElements": 193
+  },
+  "query": { ... },            // echo of your parameters
+  "creditsUsed": 2
+}</pre>
+      </section>
+
+      <section id="profile">
+        <h2>Profile</h2>
+        <p><span class="method">GET</span> <code>/v1/profile</code> — Get a full profile. Costs <strong>2 credits</strong>.</p>
+        <table class="params">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>url</td><td>string</td><td>Profile URL. Required if <code>publicIdentifier</code> is not set.</td></tr>
+            <tr><td>publicIdentifier</td><td>string</td><td>The profile slug, e.g. <code>janedoe</code>.</td></tr>
+            <tr><td>includeEmail</td><td>boolean</td><td>Also try to find a work email. Adds 5 credits when an email is found. Default <code>false</code>.</td></tr>
+          </tbody>
+        </table>
+<pre>{
+  "status": "ok",
+  "element": {
+    "publicIdentifier": "janedoe",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "headline": "Head of Growth at Acme",
+    "location": "Berlin, Germany",
+    "connections": 500,
+    "followers": 2140,
+    "currentCompany": { "name": "Acme", "url": "https://linkedin.com/company/acme" },
+    "experience": [
+      { "title": "Head of Growth", "company": "Acme", "startDate": "2022-03", "endDate": null }
+    ],
+    "education": [ { "school": "TU Berlin", "degree": "MSc", "field": "Economics" } ],
+    "skills": ["Growth marketing", "SQL", "Experimentation"]
+  },
+  "creditsUsed": 2
+}</pre>
+      </section>
+
+      <section id="company">
+        <h2>Company</h2>
+        <p><span class="method">GET</span> <code>/v1/company</code> — Get company details. Costs <strong>2 credits</strong>.</p>
+        <table class="params">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>url</td><td>string</td><td>Company page URL.</td></tr>
+            <tr><td>domain</td><td>string</td><td>Company website domain, e.g. <code>acme.com</code>. One of <code>url</code> or <code>domain</code> is required.</td></tr>
+          </tbody>
+        </table>
+<pre>{
+  "status": "ok",
+  "element": {
+    "name": "Acme",
+    "website": "https://acme.com",
+    "industry": "Software Development",
+    "employeeCount": 420,
+    "employeeRange": "201-500",
+    "headquarters": "Berlin, Germany",
+    "founded": 2014,
+    "followers": 18250,
+    "specialties": ["SaaS", "Analytics"]
+  },
+  "creditsUsed": 2
+}</pre>
+      </section>
+
+      <section id="jobs">
+        <h2>Jobs</h2>
+        <h3><span class="method">GET</span> <code>/v1/jobs/search</code></h3>
+        <p>Search live job listings. Costs <strong>1 credit per job returned</strong>.</p>
+        <table class="params">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>keywords<span class="req">required</span></td><td>string</td><td>Search terms, e.g. <code>data engineer</code>.</td></tr>
+            <tr><td>location</td><td>string</td><td>City, region or country.</td></tr>
+            <tr><td>companyId</td><td>string</td><td>Restrict to one company.</td></tr>
+            <tr><td>workplace</td><td>enum</td><td><code>onsite</code>, <code>remote</code> or <code>hybrid</code>.</td></tr>
+            <tr><td>experience</td><td>enum</td><td><code>internship</code>, <code>entry</code>, <code>mid</code>, <code>senior</code>, <code>director</code>, <code>executive</code>.</td></tr>
+            <tr><td>postedWithin</td><td>enum</td><td><code>24h</code>, <code>week</code> or <code>month</code>.</td></tr>
+            <tr><td>page</td><td>integer</td><td>Page number, starting at 1. Default <code>1</code>.</td></tr>
+          </tbody>
+        </table>
+        <h3><span class="method">GET</span> <code>/v1/job</code></h3>
+        <p>Get full job details including the description. Parameter: <code>id</code> (required). Costs <strong>1 credit</strong>.</p>
+      </section>
+
+      <section id="posts">
+        <h2>Posts</h2>
+        <p><span class="method">GET</span> <code>/v1/posts</code> — Recent posts from a profile or company. Costs <strong>1 credit per post returned</strong>.</p>
+        <table class="params">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>profileUrl</td><td>string</td><td>Profile URL. One of <code>profileUrl</code> or <code>companyUrl</code> is required.</td></tr>
+            <tr><td>companyUrl</td><td>string</td><td>Company page URL.</td></tr>
+            <tr><td>limit</td><td>integer</td><td>Max posts to return, 1–100. Default <code>20</code>.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="search">
+        <h2>People search</h2>
+        <p><span class="method">GET</span> <code>/v1/people/search</code> — Find people by filters. Returns up to 25 results per page. Costs <strong>5 credits per page</strong>.</p>
+        <table class="params">
+          <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td>title</td><td>string</td><td>Current job title, e.g. <code>VP Sales</code>.</td></tr>
+            <tr><td>company</td><td>string</td><td>Current company name or URL.</td></tr>
+            <tr><td>location</td><td>string</td><td>City, region or country.</td></tr>
+            <tr><td>industry</td><td>string</td><td>Industry name.</td></tr>
+            <tr><td>keywords</td><td>string</td><td>Free-text keywords.</td></tr>
+            <tr><td>page</td><td>integer</td><td>Page number, starting at 1.</td></tr>
+          </tbody>
+        </table>
+        <p>At least one filter is required.</p>
+      </section>
+
+      <section id="email">
+        <h2>Email finder</h2>
+        <p><span class="method post">POST</span> <code>/v1/email/find</code> — Find a verified work email. Costs <strong>5 credits only when an email is found</strong>.</p>
+<pre>curl -X POST https://api.techehs.com/v1/email/find \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"firstName": "Jane", "lastName": "Doe", "domain": "acme.com"}'</pre>
+        <p>Send either <code>profileUrl</code>, or <code>firstName</code> + <code>lastName</code> + <code>domain</code>.</p>
+<pre>{
+  "status": "ok",
+  "element": { "email": "jane.doe@acme.com", "verification": "valid", "confidence": 0.97 },
+  "creditsUsed": 5
+}</pre>
+      </section>
+
+      <section id="account">
+        <h2>Account</h2>
+        <p><span class="method">GET</span> <code>/v1/account</code> — Get your plan, remaining credits and concurrency limit. Free.</p>
+<pre>{
+  "status": "ok",
+  "element": { "plan": "growth", "creditsRemaining": 21480, "concurrency": 15, "renewsAt": "2026-11-30T00:00:00Z" },
+  "creditsUsed": 0
+}</pre>
+      </section>
+
+      <section id="errors">
+        <h2>Errors</h2>
+        <p>Errors use standard HTTP status codes and a consistent body. Errors never cost credits.</p>
+<pre>{ "status": "error", "error": { "code": "invalid_parameter", "message": "Parameter 'url' is not a valid profile URL." } }</pre>
+        <table class="params">
+          <thead><tr><th>Status</th><th>Code</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>400</td><td>invalid_parameter</td><td>A parameter is missing or malformed.</td></tr>
+            <tr><td>401</td><td>unauthorized</td><td>API key missing or invalid.</td></tr>
+            <tr><td>402</td><td>insufficient_credits</td><td>Not enough credits. Upgrade or top up.</td></tr>
+            <tr><td>404</td><td>not_found</td><td>The profile, company or job does not exist or is private.</td></tr>
+            <tr><td>429</td><td>rate_limited</td><td>Too many concurrent requests for your plan.</td></tr>
+            <tr><td>500</td><td>internal_error</td><td>Something went wrong on our side. Retry with backoff.</td></tr>
+            <tr><td>503</td><td>upstream_unavailable</td><td>Source temporarily unavailable. Retry after a few seconds.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="rate-limits">
+        <h2>Rate limits</h2>
+        <p>Limits apply to concurrent in-flight requests per account, not requests per minute.</p>
+        <table class="params">
+          <thead><tr><th>Plan</th><th>Concurrent requests</th></tr></thead>
+          <tbody>
+            <tr><td>Free</td><td>2</td></tr>
+            <tr><td>Starter</td><td>5</td></tr>
+            <tr><td>Growth</td><td>15</td></tr>
+            <tr><td>Business</td><td>50</td></tr>
+            <tr><td>Enterprise</td><td>Custom</td></tr>
+          </tbody>
+        </table>
+        <p>Every response includes <code>X-Concurrency-Limit</code> and <code>X-Credits-Remaining</code> headers. On <code>429</code>, wait for in-flight requests to finish and retry.</p>
+      </section>
+
+      <section id="sdks">
+        <h2>SDKs</h2>
+        <ul>
+          <li><strong>Node.js / TypeScript:</strong> <code>npm install @techehs/api</code></li>
+          <li><strong>Python:</strong> <code>pip install techehs</code></li>
+          <li><strong>MCP server</strong> for AI agents: <code>npx @techehs/mcp</code></li>
+        </ul>
+        <p>The SDKs handle authentication, retries with exponential backoff and typed responses.</p>
+      </section>
+
+      <section id="changelog" style="border-bottom:0">
+        <h2>Changelog</h2>
+        <ul>
+          <li><strong>2026-10</strong> — Added <code>includeEmail</code> to the Profile endpoint.</li>
+          <li><strong>2026-08</strong> — Launched the Email finder endpoint.</li>
+          <li><strong>2026-06</strong> — Added <code>workplace</code> filter to Job search.</li>
+          <li><strong>2026-04</strong> — API v1 generally available.</li>
+        </ul>
+      </section>
+    </div>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+</body>
+</html>

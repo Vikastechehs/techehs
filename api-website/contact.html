@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact — Techehs API</title>
+  <meta name="description" content="Contact the Techehs API team for sales, support or enterprise plans.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="contact">
+  <header id="site-header" class="site-header"></header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <span class="eyebrow">Contact</span>
+        <h1>Talk to our team</h1>
+        <p class="lead">Questions about volume pricing, custom endpoints or an integration? We reply within one business day.</p>
+      </div>
+    </section>
+    <section class="section" style="padding-top:16px">
+      <div class="container grid-2" style="gap:40px;align-items:start">
+        <form id="contact-form" class="card" novalidate>
+          <div class="field" style="margin-top:0">
+            <label for="c-name">Name</label>
+            <input id="c-name" type="text" autocomplete="name" required>
+            <div class="error">Please enter your name.</div>
+          </div>
+          <div class="field">
+            <label for="c-email">Work email</label>
+            <input id="c-email" type="email" autocomplete="email" required>
+            <div class="error">Please enter a valid email address.</div>
+          </div>
+          <div class="field">
+            <label for="c-topic">Topic</label>
+            <select id="c-topic">
+              <option>Sales / Enterprise</option>
+              <option>Technical support</option>
+              <option>Billing</option>
+              <option>Partnership</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="c-msg">Message</label>
+            <textarea id="c-msg" rows="5" required></textarea>
+            <div class="error">Please write a short message (at least 10 characters).</div>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit" style="margin-top:18px">Send message</button>
+          <div class="form-msg" role="alert"></div>
+        </form>
+        <div style="display:grid;gap:18px">
+          <div class="card"><div class="icon">✉️</div><h3>Email</h3><p><a href="mailto:info@techehs.com">info@techehs.com</a></p></div>
+          <div class="card"><div class="icon">📚</div><h3>Documentation</h3><p>Most technical questions are answered in the <a href="docs.html">API docs</a>.</p></div>
+          <div class="card"><div class="icon">🕑</div><h3>Response time</h3><p>Sales: within 1 business day. Support on paid plans: under 2 hours median.</p></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var form = document.getElementById("contact-form");
+    var RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    function mark(id, bad) { document.getElementById(id).closest(".field").classList.toggle("invalid", bad); return !bad; }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var n = document.getElementById("c-name").value.trim();
+      var em = document.getElementById("c-email").value.trim();
+      var t = document.getElementById("c-topic").value;
+      var m = document.getElementById("c-msg").value.trim();
+      var ok = [mark("c-name", n.length < 2), mark("c-email", !RE.test(em)), mark("c-msg", m.length < 10)].every(Boolean);
+      if (!ok) return;
+      var body = "Name: " + n + "\nEmail: " + em + "\nTopic: " + t + "\n\n" + m;
+      window.location.href = "mailto:info@techehs.com?subject=" + encodeURIComponent("[Techehs API] " + t) + "&body=" + encodeURIComponent(body);
+      var msg = form.querySelector(".form-msg");
+      msg.className = "form-msg ok";
+      msg.textContent = "Your email app should open with the message ready to send.";
+    });
+  })();
+  </script>
+</body>
+</html>

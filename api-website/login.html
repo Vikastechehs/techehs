@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log in — Techehs API</title>
+  <meta name="description" content="Log in to your Techehs API dashboard.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="login">
+  <header id="site-header" class="site-header"></header>
+
+  <main class="auth-wrap">
+    <div class="auth-card">
+      <h1>Welcome back</h1>
+      <p class="muted">Log in to manage your API keys and usage.</p>
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" autocomplete="email" placeholder="you@company.com" required>
+          <div class="error">Please enter a valid email address.</div>
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          <div class="error">Please enter your password.</div>
+        </div>
+        <p style="text-align:right;margin-top:8px;font-size:14px"><a href="contact.html">Forgot password?</a></p>
+        <button class="btn btn-primary btn-block" type="submit" style="margin-top:16px">Log in</button>
+        <div class="form-msg" role="alert"></div>
+      </form>
+      <div class="divider">or</div>
+      <p style="text-align:center;font-size:14px">New here? <a href="signup.html">Create a free account</a></p>
+    </div>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+  <script src="assets/auth.js"></script>
+  <script>TechAuth.initLogin(document.getElementById("login-form"));</script>
+</body>
+</html>

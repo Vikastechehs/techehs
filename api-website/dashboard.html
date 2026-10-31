@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Techehs API</title>
+  <meta name="description" content="Manage your Techehs API keys, credits and usage.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="dashboard">
+  <header id="site-header" class="site-header"></header>
+
+  <div class="dash">
+    <aside class="dash-side" aria-label="Dashboard">
+      <a href="#overview" class="active">📊 Overview</a>
+      <a href="#keys">🔑 API keys</a>
+      <a href="#usage">📈 Usage</a>
+      <a href="#logs">🧾 Request log</a>
+      <a href="#playground">🧪 Playground</a>
+      <a href="pricing.html">💳 Billing</a>
+      <a href="docs.html">📚 Docs</a>
+      <a href="#" id="logout">↩ Log out</a>
+    </aside>
+
+    <main class="dash-main">
+      <div id="overview">
+        <h1 id="greeting">Dashboard</h1>
+        <p class="muted" id="plan-line">Demo account</p>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><span>Credits remaining</span><b id="k-credits">0</b>
+          <div class="progress"><div id="k-progress" style="width:0%"></div></div></div>
+        <div class="kpi"><span>Requests (30 days)</span><b id="k-requests">0</b></div>
+        <div class="kpi"><span>Success rate</span><b id="k-success">0%</b></div>
+        <div class="kpi"><span>Avg. latency</span><b id="k-latency">0 ms</b></div>
+      </div>
+
+      <div class="panel" id="keys">
+        <div class="panel-head"><h3>API key</h3><span class="muted" style="font-size:13px">Send as the <code>X-API-Key</code> header</span></div>
+        <div class="key-row">
+          <div class="key-box" id="api-key">••••••••</div>
+          <button class="btn btn-outline btn-sm" id="toggle-key" type="button">Show</button>
+          <button class="btn btn-outline btn-sm" id="copy-key" type="button">Copy</button>
+          <button class="btn btn-outline btn-sm" id="rotate-key" type="button">Rotate</button>
+        </div>
+      </div>
+
+      <div class="panel" id="usage">
+        <div class="panel-head"><h3>Credits used — last 14 days</h3></div>
+        <div class="bars" id="bars"></div>
+        <div class="bar-labels" id="bar-labels"></div>
+      </div>
+
+      <div class="panel" id="logs">
+        <div class="panel-head"><h3>Recent requests</h3></div>
+        <div class="table-wrap">
+          <table class="log-table">
+            <thead><tr><th>Time</th><th>Endpoint</th><th>Status</th><th>Latency</th><th>Credits</th></tr></thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" id="playground">
+        <div class="panel-head"><h3>Playground</h3><span class="muted" style="font-size:13px">Builds a ready-to-run request with your key</span></div>
+        <div class="grid-2" style="gap:16px">
+          <div class="field" style="margin-top:0">
+            <label for="pg-endpoint">Endpoint</label>
+            <select id="pg-endpoint">
+              <option value="profile|url|https://linkedin.com/in/janedoe">GET /v1/profile</option>
+              <option value="company|url|https://linkedin.com/company/acme">GET /v1/company</option>
+              <option value="jobs/search|keywords|data engineer">GET /v1/jobs/search</option>
+              <option value="posts|profileUrl|https://linkedin.com/in/janedoe">GET /v1/posts</option>
+              <option value="people/search|title|VP Sales">GET /v1/people/search</option>
+            </select>
+          </div>
+          <div class="field" style="margin-top:0">
+            <label for="pg-value" id="pg-label">url</label>
+            <input id="pg-value" type="text">
+          </div>
+        </div>
+        <div class="code-window" style="margin-top:16px">
+          <div class="code-tabs"><span style="color:#94a3b8;font-size:13px">cURL</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre class="code-pane active" id="pg-code"></pre>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="assets/main.js"></script>
+  <script src="assets/auth.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    var user = TechAuth.current();
+    if (!user) { window.location.replace("login.html"); return; }
+
+    var fmt = function (n) { return n.toLocaleString("en-US"); };
+    var planName = user.plan.charAt(0).toUpperCase() + user.plan.slice(1);
+
+    document.getElementById("greeting").textContent = "Welcome, " + user.name.split(" ")[0];
+    document.getElementById("plan-line").textContent = planName + " plan · " + user.email;
+
+    // Deterministic demo usage from the account creation date
+    var seed = 0;
+    for (var i = 0; i < user.email.length; i++) seed = (seed * 31 + user.email.charCodeAt(i)) >>> 0;
+    function rnd() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+
+    var maxDaily = Math.max(2, Math.round(user.creditsTotal / 40));
+    var days = [], used = 0;
+    for (var d = 13; d >= 0; d--) {
+      var dt = new Date(); dt.setDate(dt.getDate() - d);
+      var v = Math.round(rnd() * maxDaily);
+      days.push({ label: (dt.getMonth() + 1) + "/" + dt.getDate(), v: v });
+      used += v;
+    }
+    used = Math.min(used, user.creditsTotal);
+    var remaining = Math.max(0, user.creditsTotal - used);
+
+    document.getElementById("k-credits").textContent = fmt(remaining);
+    document.getElementById("k-progress").style.width = (remaining / user.creditsTotal * 100).toFixed(1) + "%";
+    var requests = Math.round(used / 1.6);
+    document.getElementById("k-requests").textContent = fmt(requests);
+    document.getElementById("k-success").textContent = (97 + rnd() * 2.5).toFixed(1) + "%";
+    document.getElementById("k-latency").textContent = Math.round(900 + rnd() * 700) + " ms";
+
+    var peak = Math.max.apply(null, days.map(function (x) { return x.v; })) || 1;
+    document.getElementById("bars").innerHTML = days.map(function (x) {
+      return '<div style="height:' + Math.max(3, x.v / peak * 100) + '%" data-v="' + fmt(x.v) + ' credits"></div>';
+    }).join("");
+    document.getElementById("bar-labels").innerHTML = days.map(function (x) { return "<span>" + x.label + "</span>"; }).join("");
+
+    // Request log
+    var eps = [["/v1/profile", 2], ["/v1/company", 2], ["/v1/jobs/search", 25], ["/v1/posts", 20], ["/v1/people/search", 5]];
+    var rows = "";
+    var t = new Date();
+    for (var r = 0; r < 8; r++) {
+      var ep = eps[Math.floor(rnd() * eps.length)];
+      var fail = rnd() < 0.12;
+      t = new Date(t.getTime() - (60000 + rnd() * 900000));
+      rows += "<tr><td>" + t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + "</td>" +
+        "<td><code>" + ep[0] + "</code></td>" +
+        '<td><span class="pill ' + (fail ? "err\">404" : "ok\">200") + "</span></td>" +
+        "<td>" + Math.round(700 + rnd() * 1300) + " ms</td>" +
+        "<td>" + (fail ? 0 : ep[1]) + "</td></tr>";
+    }
+    document.getElementById("log-body").innerHTML = rows;
+
+    // API key
+    var keyBox = document.getElementById("api-key");
+    var shown = false;
+    function mask(k) { return k.slice(0, 12) + "•".repeat(Math.max(0, k.length - 16)) + k.slice(-4); }
+    function renderKey() { keyBox.textContent = shown ? user.apiKey : mask(user.apiKey); }
+    renderKey();
+    document.getElementById("toggle-key").addEventListener("click", function () {
+      shown = !shown; this.textContent = shown ? "Hide" : "Show"; renderKey();
+    });
+    document.getElementById("copy-key").addEventListener("click", function () {
+      TechCopy(user.apiKey).then(function () { TechToast("API key copied"); }, function () { TechToast("Copy failed"); });
+    });
+    document.getElementById("rotate-key").addEventListener("click", function () {
+      if (!window.confirm("Rotate key? The current key will stop working immediately.")) return;
+      user.apiKey = TechAuth.newKey(); TechAuth.save(user); renderKey(); renderPlayground();
+      TechToast("New API key generated");
+    });
+
+    // Playground
+    var sel = document.getElementById("pg-endpoint");
+    var val = document.getElementById("pg-value");
+    function onEndpoint() {
+      var parts = sel.value.split("|");
+      document.getElementById("pg-label").textContent = parts[1];
+      val.value = parts[2];
+      renderPlayground();
+    }
+    function renderPlayground() {
+      var parts = sel.value.split("|");
+      var url = "https://api.techehs.com/v1/" + parts[0] + "?" + parts[1] + "=" + encodeURIComponent(val.value.trim());
+      document.getElementById("pg-code").textContent = 'curl "' + url + '" \\\n  -H "X-API-Key: ' + user.apiKey + '"';
+    }
+    sel.addEventListener("change", onEndpoint);
+    val.addEventListener("input", renderPlayground);
+    onEndpoint();
+
+    // Sidebar
+    document.getElementById("logout").addEventListener("click", function (e) { e.preventDefault(); TechAuth.logout(); });
+    document.querySelectorAll('.dash-side a[href^="#"]:not(#logout)').forEach(function (a) {
+      a.addEventListener("click", function () {
+        document.querySelectorAll(".dash-side a").forEach(function (x) { x.classList.remove("active"); });
+        a.classList.add("active");
+      });
+    });
+  })();
+  </script>
+</body>
+</html>

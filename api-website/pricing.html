@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing — Techehs API</title>
+  <meta name="description" content="Simple, credit-based pricing. Pay only for successful results. Start free with 100 credits.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='18' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="pricing">
+  <header id="site-header" class="site-header"></header>
+
+  <main>
+    <section class="page-hero">
+      <div class="container">
+        <span class="eyebrow">Pricing</span>
+        <h1>Simple pricing. Pay only for results.</h1>
+        <p class="lead">One credit balance works across every endpoint. Failed and empty requests are always free.</p>
+        <div class="billing-toggle" role="group" aria-label="Billing period">
+          <button type="button" class="active" data-billing="monthly">Monthly</button>
+          <button type="button" data-billing="yearly">Yearly <span class="save-pill">−20%</span></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" style="padding-top:24px">
+      <div class="container">
+        <div class="pricing-grid">
+          <div class="plan">
+            <h3>Free</h3>
+            <p class="plan-desc">Try every endpoint before you commit.</p>
+            <div class="amount">$0<small> / month</small></div>
+            <div class="credits">100 credits one-time</div>
+            <a class="btn btn-outline btn-block" href="signup.html?plan=free">Start free</a>
+            <ul>
+              <li>All endpoints</li>
+              <li>2 concurrent requests</li>
+              <li>Community support</li>
+            </ul>
+          </div>
+          <div class="plan">
+            <h3>Starter</h3>
+            <p class="plan-desc">For side projects and small teams.</p>
+            <div class="amount" data-monthly="29" data-yearly="23">$29<small> / month</small></div>
+            <div class="credits">10,000 credits / month</div>
+            <a class="btn btn-outline btn-block" href="signup.html?plan=starter">Choose Starter</a>
+            <ul>
+              <li>All endpoints</li>
+              <li>5 concurrent requests</li>
+              <li>Credits roll over 1 month</li>
+              <li>Email support</li>
+            </ul>
+          </div>
+          <div class="plan featured">
+            <span class="badge">Most popular</span>
+            <h3>Growth</h3>
+            <p class="plan-desc">For growing products and data pipelines.</p>
+            <div class="amount" data-monthly="79" data-yearly="63">$79<small> / month</small></div>
+            <div class="credits">30,000 credits / month</div>
+            <a class="btn btn-primary btn-block" href="signup.html?plan=growth">Choose Growth</a>
+            <ul>
+              <li>All endpoints</li>
+              <li>15 concurrent requests</li>
+              <li>Credits roll over 1 month</li>
+              <li>Priority email support</li>
+              <li>Usage webhooks</li>
+            </ul>
+          </div>
+          <div class="plan">
+            <h3>Business</h3>
+            <p class="plan-desc">For high-volume production workloads.</p>
+            <div class="amount" data-monthly="199" data-yearly="159">$199<small> / month</small></div>
+            <div class="credits">100,000 credits / month</div>
+            <a class="btn btn-outline btn-block" href="signup.html?plan=business">Choose Business</a>
+            <ul>
+              <li>All endpoints</li>
+              <li>50 concurrent requests</li>
+              <li>Credits roll over 1 month</li>
+              <li>Slack support channel</li>
+              <li>99.9% uptime SLA</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:22px;display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap">
+          <div>
+            <h3>Enterprise</h3>
+            <p>Millions of requests per month, custom concurrency, dedicated infrastructure, invoicing and DPA.</p>
+          </div>
+          <a class="btn btn-primary" href="contact.html">Contact sales</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Credit cost per endpoint -->
+    <section class="section soft" id="rates">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Credit costs</span>
+          <h2>What each request costs</h2>
+          <p class="lead">Credits are only deducted for successful results. Effective price shown on the Business plan.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="rates">
+            <thead>
+              <tr><th>Endpoint</th><th>Unit</th><th>Credits</th><th>Effective price</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Profile</td><td>per profile</td><td>2</td><td>$0.004</td></tr>
+              <tr><td>Company</td><td>per company</td><td>2</td><td>$0.004</td></tr>
+              <tr><td>Job search</td><td>per job returned</td><td>1</td><td>$0.002</td></tr>
+              <tr><td>Job details</td><td>per job</td><td>1</td><td>$0.002</td></tr>
+              <tr><td>Posts</td><td>per post returned</td><td>1</td><td>$0.002</td></tr>
+              <tr><td>People search</td><td>per page (up to 25 results)</td><td>5</td><td>$0.010</td></tr>
+              <tr><td>Email finder</td><td>per email found</td><td>5</td><td>$0.010</td></tr>
+              <tr><td>Account / usage</td><td>per call</td><td>0</td><td>Free</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Calculator -->
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Estimate</span>
+          <h2>Find the right plan</h2>
+        </div>
+        <div class="calc">
+          <div>
+            <label for="c-profiles">Profiles / month <span id="v-profiles" class="mono">2,000</span></label>
+            <input type="range" id="c-profiles" min="0" max="50000" step="500" value="2000">
+            <label for="c-companies">Companies / month <span id="v-companies" class="mono">500</span></label>
+            <input type="range" id="c-companies" min="0" max="20000" step="250" value="500">
+            <label for="c-jobs">Jobs / month <span id="v-jobs" class="mono">3,000</span></label>
+            <input type="range" id="c-jobs" min="0" max="50000" step="500" value="3000">
+            <label for="c-emails">Emails found / month <span id="v-emails" class="mono">200</span></label>
+            <input type="range" id="c-emails" min="0" max="10000" step="100" value="200">
+          </div>
+          <div class="calc-result">
+            <span class="muted">Credits needed</span>
+            <b id="r-credits">9,000</b>
+            <p class="muted" style="margin-top:8px">Recommended plan</p>
+            <h3 id="r-plan" style="margin:4px 0 16px">Starter — $29/mo</h3>
+            <a class="btn btn-primary btn-block" id="r-cta" href="signup.html?plan=starter">Get started</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing FAQ -->
+    <section class="section soft">
+      <div class="container">
+        <div class="section-head"><h2>Pricing questions</h2></div>
+        <div class="faq">
+          <details><summary>What happens when I run out of credits?</summary><p>Requests return HTTP <code>402</code> until you upgrade or buy a top-up pack. Nothing is charged automatically unless you enable auto top-up.</p></details>
+          <details><summary>Can I buy credits without a subscription?</summary><p>Yes. One-off packs start at $49 for 12,000 credits and never expire.</p></details>
+          <details><summary>Do you offer refunds?</summary><p>If you haven't used any credits from a new subscription, you can request a full refund within 7 days.</p></details>
+          <details><summary>Which payment methods do you accept?</summary><p>All major credit and debit cards. Enterprise customers can pay by bank transfer against an invoice.</p></details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer id="site-footer" class="site-footer"></footer>
+  <script src="assets/main.js"></script>
+  <script>
+  (function () {
+    "use strict";
+    // Billing toggle
+    var buttons = document.querySelectorAll("[data-billing]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var mode = btn.getAttribute("data-billing");
+        buttons.forEach(function (b) { b.classList.toggle("active", b === btn); });
+        document.querySelectorAll(".amount[data-monthly]").forEach(function (el) {
+          var price = el.getAttribute("data-" + mode);
+          el.innerHTML = "$" + price + "<small> / month" + (mode === "yearly" ? ", billed yearly" : "") + "</small>";
+        });
+      });
+    });
+
+    // Calculator
+    var COST = { profiles: 2, companies: 2, jobs: 1, emails: 5 };
+    var PLANS = [
+      { name: "Free", key: "free", credits: 100, price: 0 },
+      { name: "Starter", key: "starter", credits: 10000, price: 29 },
+      { name: "Growth", key: "growth", credits: 30000, price: 79 },
+      { name: "Business", key: "business", credits: 100000, price: 199 }
+    ];
+    var fmt = function (n) { return n.toLocaleString("en-US"); };
+    function update() {
+      var total = 0;
+      Object.keys(COST).forEach(function (k) {
+        var v = parseInt(document.getElementById("c-" + k).value, 10) || 0;
+        document.getElementById("v-" + k).textContent = fmt(v);
+        total += v * COST[k];
+      });
+      document.getElementById("r-credits").textContent = fmt(total);
+      var plan = null;
+      for (var i = 0; i < PLANS.length; i++) {
+        if (PLANS[i].credits >= total) { plan = PLANS[i]; break; }
+      }
+      var planEl = document.getElementById("r-plan");
+      var cta = document.getElementById("r-cta");
+      if (plan) {
+        planEl.textContent = plan.name + " — " + (plan.price ? "$" + plan.price + "/mo" : "Free");
+        cta.textContent = "Get started";
+        cta.href = "signup.html?plan=" + plan.key;
+      } else {
+        planEl.textContent = "Enterprise — custom";
+        cta.textContent = "Contact sales";
+        cta.href = "contact.html";
+      }
+    }
+    Object.keys(COST).forEach(function (k) {
+      document.getElementById("c-" + k).addEventListener("input", update);
+    });
+    update();
+  })();
+  </script>
+</body>
+</html>
