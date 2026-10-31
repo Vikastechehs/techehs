@@ -6,7 +6,7 @@ ReleaseCheck lives separately under the workspace's original `extension` folder 
 
 ## Free and Pro
 
-Free includes up to **5 pages per capture**, PDF and JPEG export, both quality settings and capture recovery. **Pro is a yearly subscription: paid in rupees in India (Razorpay: UPI Autopay, cards, netbanking) or US$19/year elsewhere (Lemon Squeezy)**, and allows up to **200 pages per capture**, subject to the existing image/memory limits. Use **Plans & license** to upgrade, activate a purchase key, verify a license, manage billing, or deactivate the current browser. Retained captures remain exportable after Pro ends.
+Free includes up to **5 pages per capture**, PDF and JPEG export, both quality settings and capture recovery. **Pro is one universal yearly price: ₹999/year in India (Razorpay: UPI Autopay, cards, netbanking) or the same US$12/year elsewhere (Lemon Squeezy)**, and allows up to **200 pages per capture**, subject to the existing image/memory limits. Use **Plans & license** to upgrade, activate a purchase key, verify a license, manage billing, or deactivate the current browser. Retained captures remain exportable after Pro ends.
 
 The included build has no merchant store configured: it works as Free and clearly marks Pro purchases unavailable. To enable actual payments and license activation, follow [BILLING-SETUP.md](BILLING-SETUP.md) and supply your public store/product/variant IDs and hosted checkout URL. Payment account setup and a live checkout smoke test are still required. No secret API keys belong in the extension.
 

@@ -3,9 +3,9 @@ const path = require('node:path');
 const { configured, offers } = require('../extension/licensing.js');
 const usage = `Usage (all values are public; no secret keys are needed):
   India (Razorpay, via your license server):
-    --server-url https://licenses.example.com --inr-price "₹799/year" [--usd-price "$19/year"]
+    --server-url https://licenses.example.com --inr-price "₹999/year" [--usd-price "$12/year"]
   Outside India (Lemon Squeezy):
-    --store-id NUMBER --product-id NUMBER --variant-id NUMBER --checkout-url https://STORE.lemonsqueezy.com/buy/UUID [--lemon-price "$19/year"]
+    --store-id NUMBER --product-id NUMBER --variant-id NUMBER --checkout-url https://STORE.lemonsqueezy.com/buy/UUID [--lemon-price "$12/year"]
 Options for both stores can be combined. Use --usd-price only when Razorpay (not Lemon Squeezy) sells the USD plan.`;
 const flags = ['--server-url', '--inr-price', '--usd-price', '--store-id', '--product-id', '--variant-id', '--checkout-url', '--lemon-price'];
 const args = process.argv.slice(2), values = {};
@@ -14,7 +14,7 @@ for (let n = 0; n < args.length; n += 2) {
   values[args[n]] = args[n + 1];
 }
 const razorpay = values['--server-url'] ? { serverUrl: values['--server-url'], inrPriceLabel: values['--inr-price'] || '', usdPriceLabel: values['--usd-price'] || '' } : null;
-const lemonsqueezy = values['--store-id'] ? { storeId: Number(values['--store-id']), productId: Number(values['--product-id']), variantId: Number(values['--variant-id']), checkoutUrl: values['--checkout-url'], priceLabel: values['--lemon-price'] || '$19/year' } : null;
+const lemonsqueezy = values['--store-id'] ? { storeId: Number(values['--store-id']), productId: Number(values['--product-id']), variantId: Number(values['--variant-id']), checkoutUrl: values['--checkout-url'], priceLabel: values['--lemon-price'] || '$12/year' } : null;
 const config = { razorpay, lemonsqueezy };
 if (razorpay && !configured({ razorpay })) throw new Error('Supply your license server HTTPS URL and at least --inr-price.');
 if (lemonsqueezy && !configured({ lemonsqueezy })) throw new Error('Supply valid Lemon Squeezy product IDs and your hosted /buy/ checkout URL.');

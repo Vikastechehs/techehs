@@ -24,6 +24,8 @@ function loadConfig(env = process.env) {
     plans,
     activationLimit,
     totalCount,
+    // Only needed if the INR price is set lower than the USD price (regional pricing).
+    inrIndianPaymentsOnly: env.INR_INDIAN_PAYMENTS_ONLY === '1',
     sellerName: env.SELLER_NAME || 'PagePress',
     supportEmail: env.SUPPORT_EMAIL || ''
   };

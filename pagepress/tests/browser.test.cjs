@@ -18,7 +18,7 @@ async function main() {
   const captureFile = path.join(stage, 'capture.js'), captureSource = fs.readFileSync(captureFile, 'utf8');
   assert.ok(captureSource.includes('const CHUNK_CHARS = 8 * 1048576;'));
   fs.writeFileSync(captureFile, captureSource.replace('const CHUNK_CHARS = 8 * 1048576;', 'const CHUNK_CHARS = 64 * 1024;'));
-  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ razorpay: { serverUrl: 'https://licenses.pagepress.test', inrPriceLabel: '₹799/year' }, lemonsqueezy: { storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$19/year' } }) + ');');
+  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ razorpay: { serverUrl: 'https://licenses.pagepress.test', inrPriceLabel: '₹999/year' }, lemonsqueezy: { storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$12/year' } }) + ');');
   const { jsPDF } = require('jspdf');
   const realPdf = new jsPDF({ unit: 'pt', format: 'a4' });
   for (let n = 1; n <= 6; n++) {
@@ -54,7 +54,7 @@ async function main() {
     const executablePath = process.env.PAGEPRESS_CHROMIUM || chromium.executablePath();
     context = await chromium.launchPersistentContext(path.join(stage, 'profile'), {
       executablePath, headless: true, ignoreDefaultArgs: ['--disable-extensions'],
-      args: [`--disable-extensions-except=${stage}`, `--load-extension=${stage}`], viewport: { width: 1280, height: 940 }
+      args: [`--disable-extensions-except=${stage}`, `--load-extension=${stage}`], viewport: { width: 1280, height: 940 }, timezoneId: 'America/New_York'
     });
     console.log('Browser launched.');
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 30000 });
@@ -134,8 +134,14 @@ async function main() {
     await ui.locator('#plans-dialog').waitFor({ state: 'visible' });
     assert.equal(await ui.evaluate(async () => (await PagePressStore.getPages()).length), 0);
     assert.match(await ui.locator('#notice').textContent(), /up to 5 pages/);
-    assert.match(await ui.locator('#upgrade-inr').textContent(), /Pay in INR · ₹799\/year/);
-    assert.match(await ui.locator('#upgrade').textContent(), /Pay in USD · \$19\/year/);
+    // The browser runs in New York time, so the universal price is shown in USD until the buyer switches currency.
+    assert.match(await ui.locator('#upgrade').textContent(), /Pay in USD · \$12\/year/);
+    assert.equal(await ui.locator('#upgrade-inr').isVisible(), false, 'Buyers outside India see only the USD price');
+    assert.equal(await ui.locator('#pro-price').textContent(), '$12/year');
+    await ui.locator('#switch-region').click();
+    assert.match(await ui.locator('#upgrade-inr').textContent(), /Pay in INR · ₹999\/year/);
+    assert.equal(await ui.locator('#upgrade').isVisible(), false);
+    assert.equal(await ui.locator('#pro-price').textContent(), '₹999/year');
     for (const width of [390, 320]) {
       await ui.setViewportSize({ width, height: 760 });
       assert.equal(await ui.evaluate(() => document.getElementById('plans-dialog').scrollWidth <= document.getElementById('plans-dialog').clientWidth), true);
@@ -146,6 +152,8 @@ async function main() {
     const inrTab = await inrTabEvent; await inrTab.waitForURL('https://licenses.pagepress.test/buy?currency=INR');
     await inrTab.close(); await ui.bringToFront();
     assert.equal(await ui.locator('#plan-name').textContent(), 'Free plan', 'Opening Razorpay checkout alone never unlocks Pro');
+    await ui.locator('#switch-region').click();
+    assert.equal(await ui.locator('#upgrade').isVisible(), true);
     const checkoutTabEvent = context.waitForEvent('page'); await ui.locator('#upgrade').click();
     const checkoutTab = await checkoutTabEvent; await checkoutTab.waitForURL('https://pagepress-test.lemonsqueezy.com/buy/test-product');
     await checkoutTab.close(); await ui.bringToFront();

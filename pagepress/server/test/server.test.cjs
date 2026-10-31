@@ -10,7 +10,7 @@ const { createClient } = require('../../extension/licensing.js');
 const config = {
   publicUrl: 'http://127.0.0.1/', trustProxy: false, keyId: 'rzp_test_public', keySecret: 'test_key_secret', webhookSecret: 'test_webhook_secret',
   plans: { INR: 'plan_inr', USD: 'plan_usd' }, activationLimit: 2, totalCount: 10, sellerName: 'PagePress', supportEmail: 'help@example.com',
-  rateLimits: { license: 1000, checkout: 1000, manage: 1000 }
+  rateLimits: { license: 1000, checkout: 1000, manage: 1000 }, inrIndianPaymentsOnly: true
 };
 let clock = 1_800_000_000;
 const DAY = 86400;
@@ -27,7 +27,11 @@ const fake = {
     this.subscriptions.set(sub.id, sub); this.created.push(body); return { ...sub };
   },
   async getSubscription(id) { if (this.failGet) throw new Error('down'); return { ...this.subscriptions.get(id) }; },
-  async cancelAtCycleEnd(id) { this.cancelled.push(id); return { ...this.subscriptions.get(id) }; }
+  async cancelAtCycleEnd(id) { this.cancelled.push(id); return { ...this.subscriptions.get(id) }; },
+  payments: new Map(), refunds: [], cancelledNow: [],
+  async getPayment(id) { return { ...this.payments.get(id) }; },
+  async refundPayment(id) { this.refunds.push(id); return { id: 'rfnd_' + id }; },
+  async cancelNow(id) { this.cancelledNow.push(id); Object.assign(this.subscriptions.get(id), { status: 'cancelled' }); return { ...this.subscriptions.get(id) }; }
 };
 let server, base, db;
 before(async () => {
@@ -46,13 +50,14 @@ async function post(path, body, { form = false, headers = {}, raw } = {}) {
   return { status: response.status, data: await response.json() };
 }
 const license = (action, body) => post(`v1/licenses/${action}`, body, { form: true });
-function pay(subscriptionId, days = 365) {
+function pay(subscriptionId, days = 365, international = false) {
   Object.assign(fake.subscriptions.get(subscriptionId), { status: 'active', current_start: clock, current_end: clock + days * DAY });
   const paymentId = `pay_${subscriptionId}`;
+  fake.payments.set(paymentId, { id: paymentId, subscription_id: subscriptionId, international, method: international ? 'card' : 'upi' });
   return { razorpay_payment_id: paymentId, razorpay_subscription_id: subscriptionId, razorpay_signature: hmac(config.keySecret, `${paymentId}|${subscriptionId}`) };
 }
-function webhook(event, entity, id = `evt_${Math.random()}`, secret = config.webhookSecret) {
-  const raw = JSON.stringify({ event, payload: { subscription: { entity } } });
+function webhook(event, entity, id = `evt_${Math.random()}`, secret = config.webhookSecret, payment) {
+  const raw = JSON.stringify({ event, payload: { subscription: { entity }, ...(payment ? { payment: { entity: payment } } : {}) } });
   return post('api/razorpay/webhook', null, { raw, headers: { 'X-Razorpay-Signature': hmac(secret, raw), 'X-Razorpay-Event-Id': id } });
 }
 async function buy(email = 'buyer@example.com', currency = 'INR') {
@@ -111,8 +116,11 @@ test('webhooks are signature-checked, deduplicated, and issue licenses when the 
   const entity = fake.subscriptions.get(start.subscription_id);
   assert.equal((await webhook('subscription.activated', entity, 'evt_forged', 'wrong-secret')).status, 400);
   assert.equal((await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token })).status, 202);
-  assert.equal((await webhook('subscription.activated', entity, 'evt_a1')).status, 200);
-  assert.equal((await webhook('subscription.activated', entity, 'evt_a1')).data.duplicate, true);
+  assert.equal((await webhook('subscription.activated', entity, 'evt_a0')).status, 200);
+  assert.equal((await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token })).status, 202, 'INR waits for the charged event and its payment');
+  const payment = fake.payments.get(`pay_${start.subscription_id}`);
+  assert.equal((await webhook('subscription.charged', entity, 'evt_a1', undefined, payment)).status, 200);
+  assert.equal((await webhook('subscription.charged', entity, 'evt_a1', undefined, payment)).data.duplicate, true);
   const claimed = await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token });
   assert.equal(claimed.status, 200);
   assert.equal((await license('validate', { license_key: claimed.data.license_key })).data.valid, true);
@@ -204,4 +212,42 @@ test('license and checkout endpoints are rate limited per client', async () => {
     assert.deepEqual([await call('v1/licenses/validate', key), await call('v1/licenses/validate', key), await call('v1/licenses/validate', key)], [404, 404, 429]);
     assert.deepEqual([await call('api/checkout', { email: 'a@b.co', currency: 'INR' }), await call('api/checkout', { email: 'a@b.co', currency: 'INR' })], [200, 429]);
   } finally { limited.close(); limitedDb.close(); }
+});
+
+test('with INR_INDIAN_PAYMENTS_ONLY, international cards cannot buy the INR price: refunded, cancelled, no license', async () => {
+  const start = (await post('api/checkout', { email: 'abroad@example.com', currency: 'INR' })).data;
+  const paid = pay(start.subscription_id, 365, true);
+  const claimed = await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token, ...paid });
+  assert.equal(claimed.status, 403); assert.match(claimed.data.error, /refunded.*USD plan/);
+  assert.deepEqual([fake.refunds.at(-1), fake.cancelledNow.at(-1)], [paid.razorpay_payment_id, start.subscription_id]);
+  // A later charged webhook for the same checkout must not issue a key either.
+  await webhook('subscription.charged', fake.subscriptions.get(start.subscription_id), 'evt_intl', undefined, fake.payments.get(paid.razorpay_payment_id));
+  assert.equal((await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token })).status, 403);
+
+  // Webhook arriving first (tab closed) applies the same rule.
+  const second = (await post('api/checkout', { email: 'abroad2@example.com', currency: 'INR' })).data;
+  const paid2 = pay(second.subscription_id, 365, true);
+  await webhook('subscription.charged', fake.subscriptions.get(second.subscription_id), 'evt_intl2', undefined, fake.payments.get(paid2.razorpay_payment_id));
+  assert.equal(fake.refunds.at(-1), paid2.razorpay_payment_id);
+  assert.equal((await post('api/checkout/claim', { subscription_id: second.subscription_id, claim_token: second.claim_token })).status, 403);
+
+  // International cards are fine on the USD plan.
+  const usd = (await post('api/checkout', { email: 'abroad3@example.com', currency: 'USD' })).data;
+  const ok = await post('api/checkout/claim', { subscription_id: usd.subscription_id, claim_token: usd.claim_token, ...pay(usd.subscription_id, 365, true) });
+  assert.equal(ok.status, 200);
+});
+
+test('with a universal price (default), international cards can buy the INR plan and webhooks issue on activation', async () => {
+  const openDb = openDatabase(':memory:');
+  const open = http.createServer(createApp({ config: { ...config, inrIndianPaymentsOnly: false }, db: openDb, razorpay: fake, now: () => clock }));
+  await new Promise((resolve) => open.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${open.address().port}/`;
+  const call = (path, body) => fetch(url + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, data: await r.json() }));
+  try {
+    const refunds = fake.refunds.length;
+    const start = (await call('api/checkout', { email: 'traveller@example.com', currency: 'INR' })).data;
+    const claimed = await call('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token, ...pay(start.subscription_id, 365, true) });
+    assert.equal(claimed.status, 200); assert.equal(fake.refunds.length, refunds);
+    assert.equal((await (await fetch(url + 'api/offer?currency=INR')).json()).indianPaymentsOnly, false);
+  } finally { open.close(); openDb.close(); }
 });

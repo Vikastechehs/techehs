@@ -34,6 +34,7 @@
     const every = offer.interval > 1 ? `${offer.interval} ${offer.period.replace(/ly$/, '')}s` : { yearly: 'year', monthly: 'month', weekly: 'week', daily: 'day' }[offer.period] || offer.period;
     $('price').textContent = `${amount} / ${every}`; $('plan-name').textContent = offer.name;
     if (offer.supportEmail) $('support').textContent = 'Help with a purchase: ' + offer.supportEmail;
+    if (offer.indianPaymentsOnly) $('renewal').textContent += ' India price: pay with an Indian UPI ID, card or bank account. International cards are refunded.';
     $('pay').disabled = false;
   }).catch((error) => message(error.message || 'Payments are not available right now.', true));
   if (saved()?.claim_token) $('recover').hidden = false;

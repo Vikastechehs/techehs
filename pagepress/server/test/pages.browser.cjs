@@ -14,7 +14,8 @@ const razorpay = {
   async getPlan() { return { period: 'yearly', interval: 1, item: { name: 'PagePress Pro yearly', amount: 79900, currency: 'INR' } }; },
   async createSubscription(body) { const id = 'sub_page_' + (subscriptions.size + 1); subscriptions.set(id, { id, plan_id: body.plan_id, status: 'created', notes: body.notes }); return { id, status: 'created' }; },
   async getSubscription(id) { return { ...subscriptions.get(id) }; },
-  async cancelAtCycleEnd(id) { return { ...subscriptions.get(id) }; }
+  async cancelAtCycleEnd(id) { return { ...subscriptions.get(id) }; },
+  async getPayment(id) { return { id, international: false, method: 'upi' }; }
 };
 
 async function main() {

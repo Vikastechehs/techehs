@@ -33,6 +33,7 @@ npm start
 | `RAZORPAY_PLAN_ID_INR` | yes | Yearly INR plan ID |
 | `RAZORPAY_PLAN_ID_USD` | no | Yearly USD plan, only if Razorpay (not Lemon Squeezy) sells USD |
 | `ACTIVATION_LIMIT` | no | Browsers per license, default 2 |
+| `INR_INDIAN_PAYMENTS_ONLY` | no | `1` refunds international cards on the INR plan. Only for regional pricing; leave off with the universal price |
 | `SUBSCRIPTION_TOTAL_COUNT` | no | Yearly renewals authorised in the mandate, default 10 |
 | `DATABASE_PATH` | no | SQLite file, default `./data/pagepress.sqlite` |
 | `PORT` | no | Default 8787 |

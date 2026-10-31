@@ -13,6 +13,7 @@ function openDatabase(file) {
       email TEXT NOT NULL,
       currency TEXT NOT NULL,
       claim_hash TEXT NOT NULL,
+      rejected INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS licenses (

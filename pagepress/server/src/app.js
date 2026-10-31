@@ -33,6 +33,7 @@ function createApp({ config, db, razorpay, now }) {
   const q = {
     checkout: db.prepare('SELECT * FROM checkouts WHERE subscription_id = ?'),
     addCheckout: db.prepare('INSERT INTO checkouts (subscription_id, email, currency, claim_hash, created_at) VALUES (?, ?, ?, ?, ?)'),
+    reject: db.prepare('UPDATE checkouts SET rejected = 1 WHERE subscription_id = ?'),
     seenEvent: db.prepare('SELECT 1 FROM webhook_events WHERE id = ?'),
     recordEvent: db.prepare('INSERT OR IGNORE INTO webhook_events (id, received_at) VALUES (?, ?)')
   };
@@ -82,22 +83,36 @@ function createApp({ config, db, razorpay, now }) {
     return [200, { key_id: config.keyId, subscription_id: subscription.id, claim_token: claim, email, name: config.sellerName,
       description: `PagePress Pro · ${p.name}`, currency: p.currency, amount: p.amount }];
   }
+  const REGION_ERROR = 'The India price needs an Indian UPI, card or bank account. Your international card payment has been refunded; please buy the USD plan instead.';
+  // Optional (INR_INDIAN_PAYMENTS_ONLY=1), for regional pricing where INR is cheaper than USD: an international card
+  // on the INR plan gets no license; the payment is refunded and the subscription cancelled. Off with a universal price.
+  async function regionAllowed(checkout, currency, payment) {
+    if (!config.inrIndianPaymentsOnly || currency !== 'INR' || !payment?.international) return true;
+    if (checkout) q.reject.run(checkout.subscription_id);
+    const subscriptionId = checkout?.subscription_id || payment.subscription_id;
+    for (const [step, action] of [['refund', () => razorpay.refundPayment(payment.id)], ['cancel', () => razorpay.cancelNow(subscriptionId)]]) {
+      try { await action(); } catch (error) { console.error(new Date().toISOString(), `Regional ${step} failed for ${payment.id}; handle it in the Razorpay dashboard.`, error.message); }
+    }
+    return false;
+  }
   // Return the license for a checkout this browser started. A valid payment signature issues it immediately;
   // without one (for example after closing the tab) the license appears once Razorpay's webhook arrives.
   async function claim(body) {
     const checkout = q.checkout.get(String(body.subscription_id || ''));
     if (!checkout || !body.claim_token || sha256(String(body.claim_token)) !== checkout.claim_hash) return [403, { error: 'This checkout could not be found.' }];
+    if (checkout.rejected) return [403, { error: REGION_ERROR }];
     let license = licenses.bySubscription(checkout.subscription_id);
     if (!license && body.razorpay_payment_id) {
       if (body.razorpay_subscription_id !== checkout.subscription_id || !verifyPaymentSignature(config.keySecret, String(body.razorpay_payment_id), checkout.subscription_id, body.razorpay_signature)) {
         return [400, { error: 'Payment verification failed. If you were charged, contact support with your payment ID.' }];
       }
+      if (!await regionAllowed(checkout, checkout.currency, await razorpay.getPayment(String(body.razorpay_payment_id)))) return [403, { error: REGION_ERROR }];
       license = licenses.issue({ subscription: await razorpay.getSubscription(checkout.subscription_id), email: checkout.email, currency: checkout.currency });
     }
     if (!license) return [202, { pending: true, error: 'Payment confirmation has not arrived yet. Try again in a minute.' }];
     return [200, { license_key: license.key, email: license.email, expires_at: license.expires_at ? new Date(license.expires_at * 1000).toISOString() : null }];
   }
-  function webhook(raw, headers) {
+  async function webhook(raw, headers) {
     if (!verifyWebhookSignature(config.webhookSecret, raw, headers['x-razorpay-signature'])) return [400, { error: 'Invalid signature.' }];
     const eventId = String(headers['x-razorpay-event-id'] || '');
     if (eventId && q.seenEvent.get(eventId)) return [200, { ok: true, duplicate: true }];
@@ -110,7 +125,10 @@ function createApp({ config, db, razorpay, now }) {
       const checkout = q.checkout.get(subscription.id);
       const email = checkout?.email || subscription.notes?.email;
       const currency = checkout?.currency || Object.keys(config.plans).find((c) => config.plans[c] === subscription.plan_id);
-      if (email && currency) licenses.issue({ subscription, email, currency });
+      const payment = event.payload.payment?.entity;
+      // With the regional rule on, INR licenses wait for subscription.charged, which carries the payment to check.
+      const checkable = !config.inrIndianPaymentsOnly || currency !== 'INR' || payment;
+      if (email && currency && checkable && !checkout?.rejected && await regionAllowed(checkout, currency, payment)) licenses.issue({ subscription, email, currency });
     } else licenses.sync(subscription);
     // Record the event only after processing, so a failed attempt is processed again on Razorpay's retry.
     if (eventId) q.recordEvent.run(eventId, Math.floor(Date.now() / 1000));
@@ -128,12 +146,12 @@ function createApp({ config, db, razorpay, now }) {
       if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, { ok: true });
       if (req.method === 'GET' && url.pathname === '/api/offer') {
         const p = await plan(String(url.searchParams.get('currency') || 'INR').toUpperCase());
-        return p ? send(res, 200, { currency: p.currency, amount: p.amount, name: p.name, period: p.period, interval: p.interval, supportEmail: config.supportEmail })
+        return p ? send(res, 200, { currency: p.currency, amount: p.amount, name: p.name, period: p.period, interval: p.interval, supportEmail: config.supportEmail, indianPaymentsOnly: config.inrIndianPaymentsOnly && p.currency === 'INR' })
           : send(res, 404, { error: 'This currency is not available.' });
       }
       if (req.method !== 'POST') return send(res, 404, { error: 'Not found.' });
       const raw = await readBody(req);
-      if (url.pathname === '/api/razorpay/webhook') return send(res, ...webhook(raw, req.headers));
+      if (url.pathname === '/api/razorpay/webhook') return send(res, ...await webhook(raw, req.headers));
       const body = parse(raw, String(req.headers['content-type'] || ''));
       const license = /^\/v1\/licenses\/(validate|activate|deactivate)$/.exec(url.pathname);
       if (license) {

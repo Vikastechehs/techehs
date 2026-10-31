@@ -37,7 +37,10 @@ function createRazorpay({ keyId, keySecret, fetcher = fetch, baseUrl = 'https://
     getPlan: (id) => call('GET', `plans/${encodeURIComponent(id)}`),
     createSubscription: (body) => call('POST', 'subscriptions', body),
     getSubscription: (id) => call('GET', `subscriptions/${encodeURIComponent(id)}`),
-    cancelAtCycleEnd: (id) => call('POST', `subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: 1 })
+    cancelAtCycleEnd: (id) => call('POST', `subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: 1 }),
+    cancelNow: (id) => call('POST', `subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: 0 }),
+    getPayment: (id) => call('GET', `payments/${encodeURIComponent(id)}`),
+    refundPayment: (id) => call('POST', `payments/${encodeURIComponent(id)}/refund`, {})
   };
 }
 module.exports = { createRazorpay, verifyPaymentSignature, verifyWebhookSignature, hmac };

@@ -55,7 +55,7 @@
     const c = normalize(config), list = [];
     const rzp = providers.razorpay.configured(c.razorpay), lemon = providers.lemonsqueezy.configured(c.lemonsqueezy);
     if (rzp && c.razorpay.inrPriceLabel) list.push({ currency: 'INR', provider: 'razorpay', priceLabel: c.razorpay.inrPriceLabel });
-    if (lemon) list.push({ currency: 'USD', provider: 'lemonsqueezy', priceLabel: c.lemonsqueezy.priceLabel || '$19/year' });
+    if (lemon) list.push({ currency: 'USD', provider: 'lemonsqueezy', priceLabel: c.lemonsqueezy.priceLabel || '$12/year' });
     else if (rzp && c.razorpay.usdPriceLabel) list.push({ currency: 'USD', provider: 'razorpay', priceLabel: c.razorpay.usdPriceLabel });
     return list;
   }

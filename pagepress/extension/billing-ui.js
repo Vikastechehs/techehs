@@ -6,8 +6,9 @@
     config: PagePressBillingConfig, storage: PagePressLicenseStore,
     hasPermission: (origin) => chrome.permissions.contains({ origins: [origin] })
   }) : null;
-  // Show the INR offer first for browsers set to Indian time; both remain available everywhere.
-  const inIndia = /^Asia\/(Kolkata|Calcutta)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || '');
+  // PagePress uses one universal price, shown in the buyer's currency: INR (UPI, Indian cards) for browsers set to
+  // Indian time, USD elsewhere. The switch link covers travellers and anyone who prefers the other currency.
+  let region = /^Asia\/(Kolkata|Calcutta)$/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || '') ? 'INR' : 'USD';
   async function send(action, args = {}) {
     if (!enabled) throw new Error('Install PagePress in Chrome to manage a license.');
     switch (action) {
@@ -30,15 +31,18 @@
     const offer = (currency) => (status.offers || []).find((o) => o.currency === currency);
     $('plan-name').textContent = pro ? 'Pro plan' : 'Free plan';
     $('plan-summary').textContent = `Up to ${status.pageLimit} pages per capture. PDF and JPEG included.`;
-    $('pro-price').textContent = status.priceLabel || '$19/year';
+    const chosen = offer(region) || (status.offers || [])[0], other = (status.offers || []).find((o) => o !== chosen);
+    $('pro-price').textContent = chosen?.priceLabel || '$12/year';
     for (const [id, currency, label] of [['upgrade-inr', 'INR', 'Pay in INR'], ['upgrade', 'USD', 'Pay in USD']]) {
       const item = offer(currency), button = $(id);
-      button.hidden = status.configured && !item;
+      // Unconfigured builds keep one disabled "Upgrade to Pro" button.
+      button.hidden = chosen ? chosen.currency !== currency : currency === 'INR';
       button.disabled = locked || !item || pro;
       button.textContent = pro ? 'Pro is active' : item ? `${label} · ${item.priceLabel}` : 'Upgrade to Pro';
     }
-    if (!status.configured) $('upgrade-inr').hidden = true;
-    $('upgrade-options').classList.toggle('india-first', inIndia);
+    $('switch-region').hidden = !other || pro;
+    $('switch-region').disabled = locked;
+    $('switch-region').textContent = other?.currency === 'INR' ? 'Paying from India? Pay in INR' : 'Paying from outside India? Pay in USD';
     $('activate-license').disabled = locked || !status.configured;
     $('license-email').disabled = locked; $('license-key').disabled = locked;
     $('license-form').hidden = status.hasLicense;
@@ -62,6 +66,7 @@
   $('plans-close').addEventListener('click', () => $('plans-dialog').close());
   $('upgrade').addEventListener('click', () => run('checkout', { currency: 'USD' }));
   $('upgrade-inr').addEventListener('click', () => run('checkout', { currency: 'INR' }));
+  $('switch-region').addEventListener('click', () => { region = region === 'INR' ? 'USD' : 'INR'; render(); });
   $('manage-billing').addEventListener('click', () => run('portal'));
   $('refresh-license').addEventListener('click', async () => {
     try {
