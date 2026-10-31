@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.5.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.6.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -63,6 +63,14 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 ## Delivery expectations
 
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
+
+## Changes in 0.6.0: compatibility checker and image viewers
+
+- `extension/capture.js` adds a generic **page-list adapter** for viewers that show pages as large `<img>` (scanned sheets, lazy-loaded pages included) or `<canvas>` elements. Pages are found by size and shape, grouped by container, captured at native pixels, and never upscaled. Pages under 1,200 px get a warning. Cross-origin images are refused with the host named. PDF.js viewers are still detected first.
+- The panel shows "saved at original resolution (W x H px)" and disables the quality setting for these viewers.
+- `diagnose()` in the engine returns a read-only compatibility report. `tools/compat-check.cjs` runs the real engine on real pages (URL list or interactive mode for portals behind forms), optionally trial-captures the first pages, and writes `report.md`, `report.json` and sample PNGs. See `COMPATIBILITY.md`.
+- The engine accepts a `PagePressTransport` hook so the checker can collect its messages. Extension content scripts run in an isolated world, so page scripts cannot set it.
+- New fixtures (`tests/image-fixtures.cjs`) generate PNG sheets on the fly. `tests/compat.test.cjs` covers 8 viewer cases, and the extension browser test captures an image viewer end to end.
 
 ## Pricing model
 

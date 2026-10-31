@@ -17,6 +17,8 @@
     const locked = busy || detecting || authorizing || !!download;
     PagePressBilling.setBusy(locked);
     for (const id of ['format', 'quality', 'timing', 'from', 'to', 'filename', 'save-as']) $(id).disabled = locked;
+    // Image page viewers have no zoom: pages are saved at the source image's own resolution.
+    if (source?.fixedResolution) $('quality').disabled = true;
     $('detect').disabled = locked;
     $('capture').disabled = locked || !source;
     $('capture').textContent = job ? 'New capture' : source ? `Capture ${Math.max(1, Number($('to').value) - Number($('from').value) + 1)} pages` : 'Capture all pages';
@@ -50,7 +52,8 @@
   }
   function showSource(info) {
     $('source-title').textContent = info.title || 'Document viewer'; $('source-url').textContent = info.url;
-    $('total').textContent = info.total; $('viewer-kind').textContent = info.viewer;
+    $('total').textContent = info.total;
+    $('viewer-kind').textContent = info.fixedResolution ? `${info.viewer} · saved at original resolution${info.sample ? ` (${info.sample.width.toLocaleString()} x ${info.sample.height.toLocaleString()} px)` : ''}` : info.viewer;
     $('to').max = info.total; $('from').max = info.total;
   }
   async function target() {

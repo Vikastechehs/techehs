@@ -32,7 +32,9 @@ async function main() {
     realPdf.setTextColor(220, 120, 120); realPdf.text('SOURCE WATERMARK', 150, 190); realPdf.setTextColor(0, 0, 0);
   }
   fs.writeFileSync(path.join(artifacts, 'real-source.pdf'), Buffer.from(realPdf.output('arraybuffer')));
+  const imageFixtures = require('./image-fixtures.cjs');
   const server = http.createServer((req, res) => {
+    if (imageFixtures.handle(req, res, `http://localhost:${server.address().port}`)) return;
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname.startsWith('/pdfjs/')) {
       const base = path.resolve(root, 'node_modules/pdfjs-dist');
@@ -113,7 +115,9 @@ async function main() {
     await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: artifacts, eventsEnabled: true });
     async function selectSource(url) {
       await source.goto(url); await source.locator('body').waitFor({ state: 'attached' });
-      if (new URL(url).pathname !== '/unsupported') await source.locator('.page[data-loaded="true"]').waitFor({ timeout: 30000 });
+      const pathname = new URL(url).pathname;
+      if (pathname === '/image-viewer') await source.locator('.sheet img').first().waitFor({ timeout: 30000 });
+      else if (pathname !== '/unsupported') await source.locator('.page[data-loaded="true"]').waitFor({ timeout: 30000 });
       await ui.evaluate(async (url) => {
         const tabs = await chrome.tabs.query({}); const selected = tabs.find((t) => t.url === url);
         await chrome.storage.local.set({ pagepressTabId: selected.id });
@@ -300,6 +304,7 @@ async function main() {
     assert.ok(realPages[3].width > realPages[3].height);
     await retainDownload('pagepress-real-pdfjs.pdf');
 
+
     await ui.locator('#plans-open').click();
     const portalEvent = context.waitForEvent('page'); await ui.locator('#manage-billing').click();
     const portal = await portalEvent; await portal.waitForURL('https://pagepress-test.lemonsqueezy.com/billing'); await portal.close(); await ui.bringToFront();
@@ -319,6 +324,21 @@ async function main() {
     await ui.waitForFunction(() => document.getElementById('state').textContent === 'Saved' && document.querySelectorAll('.page-row').length === 1, null, { timeout: 30000 });
     await ui.bringToFront(); assert.equal(await ui.locator('.page-row').count(), 1);
     await retainDownload('pagepress-free-page.pdf');
+    // Image page viewer (scanned sheets as <img>, later pages lazy-loaded) on the Free plan: native resolution, quality fixed.
+    await selectSource(origin + '/image-viewer?pages=4');
+    await ui.waitForFunction(() => document.getElementById('viewer-kind').textContent.startsWith('Image page viewer'), null, { timeout: 30000 });
+    assert.match(await ui.locator('#viewer-kind').textContent(), /Image page viewer · saved at original resolution \(1,240 x 1,754 px\)/);
+    assert.equal(await ui.locator('#quality').isDisabled(), true);
+    await ui.locator('#from').fill('1'); await ui.locator('#to').fill('4');
+    await ui.locator('#filename').fill('pagepress-image-viewer.pdf');
+    await ui.locator('#capture').click(); if (!realOnly) await ui.locator('button[value="confirm"]').click();
+    await ui.waitForFunction(() => document.getElementById('state').textContent === 'Capturing', null, { timeout: 30000 });
+    await source.bringToFront();
+    await ui.waitForFunction(() => ['Saved', 'Needs attention'].includes(document.getElementById('state').textContent), null, { timeout: 120000 });
+    assert.equal(await ui.locator('#state').textContent(), 'Saved', await ui.locator('#notice').textContent());
+    const imagePages = await ui.evaluate(async () => (await PagePressStore.getPages()).sort((a, b) => a.number - b.number).map((p) => [p.number, p.width, p.height, p.warning]));
+    assert.deepEqual(imagePages, [[1, 1240, 1754, ''], [2, 1240, 1754, ''], [3, 1754, 1240, ''], [4, 1240, 1754, '']]);
+    await retainDownload('pagepress-image-viewer.pdf');
 
     await selectSource(origin + '/unsupported');
     await ui.waitForFunction(() => document.getElementById('notice').textContent.includes('No supported document viewer'));

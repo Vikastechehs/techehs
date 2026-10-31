@@ -1,4 +1,4 @@
-# PagePress 0.5.0 test results
+# PagePress 0.6.0 test results
 
 Run on 31 October 2026 in a Linux container (Node 22, headless Chromium via Playwright, isolated profile). Razorpay and Lemon Squeezy were replaced by fakes and mocks; no real checkout or payment was made.
 
@@ -9,9 +9,13 @@ Run on 31 October 2026 in a Linux container (Node 22, headless Chromium via Play
 | Browser: unconfigured build stays Free with purchases disabled; narrow layouts | `node tests/browser.test.cjs --unconfigured` | Pass |
 | Browser (New York time): week/month/year buttons in USD only, switch link shows the three INR plans; INR week opens `/buy?currency=INR&plan=week`, USD month and year open their Lemon Squeezy checkouts; INR opens the license server's `/buy?currency=INR`, USD opens Lemon Squeezy, neither unlocks Pro; Free 5-page gate, invalid key, Pro activation and persistence, billing portal, revocation, deactivation; full capture and export scenarios from 0.3.1; 390/320 px plan dialog | `node tests/browser.test.cjs` (also with `TZ=Asia/Kolkata`) | Pass |
 | Checkout and self-service pages in Chromium against the real server, Razorpay `checkout.js` stubbed to sign like Razorpay: yearly plan and 1-week pass bought (subscription vs one-time order), keys displayed and recovered, `/manage` shows the pass without renewal, refuses a wrong email, shows and cancels yearly renewal; 390 px layout | `npm --prefix server run test:pages` | Pass |
-| Independent PDF/JPEG checks | `python3 tests/verify_pdfs.py`, `python3 tests/verify_jpegs.py` | Pass (unchanged capture/export code) |
+| Compatibility checker on 8 fixture pages: image viewer with lazy pages and a header logo (supported, 6 pages, native 1240x1754, landscape page 1754x1240), PDF.js (supported), plain canvas viewer (supported), cross-origin images (unsupported, unreadable), 900 px source images (partial, saved without upscaling), built-in PDF embed, cross-origin frame and plain page (unsupported, with reasons) | `node tests/compat.test.cjs` | Pass |
+| Extension panel on an image page viewer (Free plan, 4 pages, lazy-loaded): label shows original resolution, quality disabled, pages saved at 1240x1754 / 1754x1240 with no warnings, PDF downloaded | part of `node tests/browser.test.cjs` | Pass |
+| Independent PDF/JPEG checks | `python3 tests/verify_pdfs.py`, `python3 tests/verify_jpegs.py` | Pass (now also the 4-page image-viewer PDF: embedded images 1,240 px wide) |
 
 ## Not verified here
+
+- The checker and image-viewer adapter on real third-party portals: this environment cannot reach them. Run `node tools/compat-check.cjs --interactive` on your machine (see `COMPATIBILITY.md`).
 
 - Real Razorpay checkout, UPI Autopay mandates, webhook delivery and international (USD) subscriptions: no Razorpay account exists yet, and this environment cannot reach razorpay.com.
 - The `/buy` page with the real Razorpay Checkout window (tested with a stub of its script).
