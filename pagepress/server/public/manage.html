@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Manage PagePress Pro</title><link rel="stylesheet" href="assets/site.css"></head>
+<body><main>
+  <h1>Manage PagePress Pro</h1><p class="muted">For subscriptions bought in rupees or through Razorpay.</p>
+  <section class="card"><form id="form"><label for="email">Checkout email</label><input id="email" type="email" autocomplete="email" required>
+    <label for="key">License key</label><input id="key" autocomplete="off" spellcheck="false" placeholder="PP-XXXXX-XXXXX-XXXXX-XXXXX" required>
+    <button type="submit">Show my subscription</button></form><p id="message" role="status"></p></section>
+  <section class="card" id="account" hidden>
+    <p><strong id="status"></strong></p><p class="muted" id="period"></p>
+    <h2>Browsers using this license</h2><p class="muted" id="usage"></p><ul class="instances" id="instances"></ul>
+    <p class="muted">Releasing a browser frees its activation, for example after reinstalling Chrome or replacing a computer. Its PagePress returns to Free at its next check.</p>
+    <button id="cancel" class="secondary" type="button">Cancel renewal</button>
+    <p class="muted">Cancelling stops future charges. Pro stays active until the end of the period you already paid for.</p>
+  </section>
+</main><script src="assets/manage.js"></script></body></html>

@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.3.1, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.4.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -63,6 +63,17 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 ## Delivery expectations
 
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
+
+## Changes in 0.4.0: INR (Razorpay) and USD pricing
+
+- **India / INR:** new `server/` license server (Node 22.13+, built-in SQLite, no dependencies). It hosts the `/buy` checkout page with Razorpay's payment window, creates yearly Razorpay subscriptions, verifies the payment signature and signed webhooks, issues `PP-` license keys, and serves the same `/v1/licenses/validate|activate|deactivate` API shape the extension already used for Lemon Squeezy. `/manage` lets customers see renewal status, release browser activations and cancel renewal. See `server/README.md`.
+- **Outside India / USD:** Lemon Squeezy stays the USD store. If it is unavailable, the server can sell a USD Razorpay plan instead.
+- **Extension:** `licensing.js` now supports both stores. `PP-` keys are verified with the license server and other keys with Lemon Squeezy; each response must match its own store's product identity. The plan dialog shows **Pay in INR** and **Pay in USD** (INR first for Indian-timezone browsers). Only the license host matching the key is requested as an optional permission. Older saved Lemon Squeezy licenses keep working.
+- `scripts/configure-billing.cjs` configures either or both stores and adds the server origin to `optional_host_permissions`.
+- `BILLING-SETUP.md` and `PRIVACY.md` are rewritten for both stores. Razorpay is a gateway, not a merchant of record: the seller handles GST and invoices for INR sales.
+- `npm test` now also runs the server suite. The browser test checks both buttons and the INR checkout tab, and captures 390/320 px plan screenshots.
+
+Still open: Razorpay account, KYC, Subscriptions enablement and plan; hosting the license server on HTTPS with a persistent, backed-up disk; configuring the extension; test-mode and live purchases in both currencies.
 
 ## Changes in 0.3.1
 

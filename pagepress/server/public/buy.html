@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PagePress Pro</title><link rel="stylesheet" href="assets/site.css"></head>
+<body><main>
+  <h1>PagePress Pro</h1><p class="muted">Capture up to 200 document pages per run as one clear PDF or ordered JPEGs.</p>
+  <section class="card" id="offer">
+    <p class="muted" id="plan-name">Yearly subscription</p><p class="price" id="price">…</p>
+    <p class="muted" id="renewal">Renews every year until you cancel. Cancel any time from Manage billing.</p>
+    <form id="form"><label for="email">Email for your license</label><input id="email" type="email" autocomplete="email" maxlength="254" required>
+      <p class="muted">You will enter this email with your license key in PagePress. Payment is handled by Razorpay; this site never sees your card or UPI details.</p>
+      <button id="pay" type="submit" disabled>Continue to payment</button></form>
+    <button id="recover" class="secondary" type="button" hidden>Show the license from my last purchase</button>
+    <p id="message" role="status"></p>
+  </section>
+  <section class="card" id="done" hidden>
+    <h2>Payment complete</h2><p>Your PagePress Pro license key:</p><p class="key" id="key"></p>
+    <button id="copy" type="button">Copy license key</button>
+    <ol><li>Save this key somewhere safe. It is also shown again on this browser if you return to this page.</li>
+      <li>Open PagePress → <strong>Plans &amp; license</strong>.</li><li>Enter <strong id="done-email"></strong> and this key, then choose <strong>Activate license</strong>.</li></ol>
+  </section>
+  <p class="muted" id="support"></p>
+</main>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="assets/buy.js"></script>
+</body></html>

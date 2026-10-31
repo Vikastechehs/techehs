@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "PagePress - Clear PDF and JPEG Capture",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Capture document sheets at high resolution as one paginated PDF or separate JPEG images.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage", "sidePanel", "downloads"],

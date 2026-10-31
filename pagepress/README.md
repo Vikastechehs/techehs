@@ -6,7 +6,7 @@ ReleaseCheck lives separately under the workspace's original `extension` folder 
 
 ## Free and Pro
 
-Free includes up to **5 pages per capture**, PDF and JPEG export, both quality settings and capture recovery. **Pro is US$19/year** and allows up to **200 pages per capture**, subject to the existing image/memory limits. Use **Plans & license** to upgrade, activate a purchase key, verify a license, manage billing, or deactivate the current browser. Retained captures remain exportable after Pro ends.
+Free includes up to **5 pages per capture**, PDF and JPEG export, both quality settings and capture recovery. **Pro is a yearly subscription: paid in rupees in India (Razorpay: UPI Autopay, cards, netbanking) or US$19/year elsewhere (Lemon Squeezy)**, and allows up to **200 pages per capture**, subject to the existing image/memory limits. Use **Plans & license** to upgrade, activate a purchase key, verify a license, manage billing, or deactivate the current browser. Retained captures remain exportable after Pro ends.
 
 The included build has no merchant store configured: it works as Free and clearly marks Pro purchases unavailable. To enable actual payments and license activation, follow [BILLING-SETUP.md](BILLING-SETUP.md) and supply your public store/product/variant IDs and hosted checkout URL. Payment account setup and a live checkout smoke test are still required. No secret API keys belong in the extension.
 
@@ -54,14 +54,14 @@ The Bihar viewer DOM and controls were inspected during implementation, and its 
 
 ## Privacy and Permissions
 
-No analytics, external AI, server upload, or cloud document capture is used. Rendered page images, source title/URL, and job settings remain in this extension's local IndexedDB. **Clear capture**, uninstalling, or clearing extension/browser data removes them. Export important documents before clearing browser data. Optional Pro billing uses hosted Lemon Squeezy checkout and license verification; document captures are never sent there. License credentials are stored in a separate extension-origin IndexedDB database and survive Clear capture. See [PRIVACY.md](PRIVACY.md).
+No analytics, external AI, server upload, or cloud document capture is used. Rendered page images, source title/URL, and job settings remain in this extension's local IndexedDB. **Clear capture**, uninstalling, or clearing extension/browser data removes them. Export important documents before clearing browser data. Optional Pro billing uses Razorpay checkout with the seller's PagePress license server (INR) or Lemon Squeezy hosted checkout (USD), and the matching license verification; document captures are never sent to either. License credentials are stored in a separate extension-origin IndexedDB database and survive Clear capture. See [PRIVACY.md](PRIVACY.md).
 
 - `activeTab`: access the document tab only after the user invokes the extension.
 - `scripting`: run the document detection/render-capture code in that authorized page.
 - `sidePanel`: keep controls and progress alongside the document.
 - `storage`: remember the last source tab.
 - `downloads`: save and observe completion of generated PDFs, JPEG images, and JPEG ZIP archives.
-- Optional `https://api.lemonsqueezy.com/*` access: requested when the user activates or verifies a Pro license; allows only license API requests. No permanent document-site access is added.
+- Optional `https://api.lemonsqueezy.com/*` and license-server access (the seller's own HTTPS origin, added by `scripts/configure-billing.cjs`): only the one matching the user's license is requested, when they activate or verify Pro; used only for license API requests. No permanent document-site access is added.
 
 No permanent all-sites host permission is requested. Website requests normally needed to render a page can still occur as the viewer loads each sheet. The extension does not deliberately fetch document-source PDFs or send captured images off the device. Optional rendering libraries are bundled, not loaded from a CDN.
 

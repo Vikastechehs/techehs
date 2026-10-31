@@ -12,13 +12,13 @@ async function main() {
   const stage = fs.mkdtempSync(path.join(artifacts, 'isolated-'));
   fs.cpSync(path.join(root, 'extension'), stage, { recursive: true });
   const manifest = JSON.parse(fs.readFileSync(path.join(stage, 'manifest.json')));
-  manifest.host_permissions = ['http://127.0.0.1/*', 'https://api.lemonsqueezy.com/*'];
+  manifest.host_permissions = ['http://127.0.0.1/*', 'https://api.lemonsqueezy.com/*', 'https://licenses.pagepress.test/*'];
   fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest));
   // Small parts make every test page cross the multi-message transfer path used for very large sheets.
   const captureFile = path.join(stage, 'capture.js'), captureSource = fs.readFileSync(captureFile, 'utf8');
   assert.ok(captureSource.includes('const CHUNK_CHARS = 8 * 1048576;'));
   fs.writeFileSync(captureFile, captureSource.replace('const CHUNK_CHARS = 8 * 1048576;', 'const CHUNK_CHARS = 64 * 1024;'));
-  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ provider: 'lemonsqueezy', storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$19/year' }) + ');');
+  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ razorpay: { serverUrl: 'https://licenses.pagepress.test', inrPriceLabel: '₹799/year' }, lemonsqueezy: { storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$19/year' } }) + ');');
   const { jsPDF } = require('jspdf');
   const realPdf = new jsPDF({ unit: 'pt', format: 'a4' });
   for (let n = 1; n <= 6; n++) {
@@ -81,6 +81,7 @@ async function main() {
         };
       });
       await context.route('https://pagepress-test.lemonsqueezy.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Isolated checkout test. No payment collected.</h1>' }));
+      await context.route('https://licenses.pagepress.test/**', (route) => route.fulfill({ contentType: 'text/html', body: '<h1>Isolated Razorpay checkout test. No payment collected.</h1>' }));
     }
     const source = await context.newPage(); await source.setViewportSize({ width: 640, height: 760 });
     source.on('pageerror', (error) => sourceErrors.push(error.message));
@@ -133,6 +134,18 @@ async function main() {
     await ui.locator('#plans-dialog').waitFor({ state: 'visible' });
     assert.equal(await ui.evaluate(async () => (await PagePressStore.getPages()).length), 0);
     assert.match(await ui.locator('#notice').textContent(), /up to 5 pages/);
+    assert.match(await ui.locator('#upgrade-inr').textContent(), /Pay in INR · ₹799\/year/);
+    assert.match(await ui.locator('#upgrade').textContent(), /Pay in USD · \$19\/year/);
+    for (const width of [390, 320]) {
+      await ui.setViewportSize({ width, height: 760 });
+      assert.equal(await ui.evaluate(() => document.getElementById('plans-dialog').scrollWidth <= document.getElementById('plans-dialog').clientWidth), true);
+      await ui.screenshot({ path: path.join(artifacts, `plans-free-${width}.png`) });
+    }
+    await ui.setViewportSize({ width: 1280, height: 940 });
+    const inrTabEvent = context.waitForEvent('page'); await ui.locator('#upgrade-inr').click();
+    const inrTab = await inrTabEvent; await inrTab.waitForURL('https://licenses.pagepress.test/buy?currency=INR');
+    await inrTab.close(); await ui.bringToFront();
+    assert.equal(await ui.locator('#plan-name').textContent(), 'Free plan', 'Opening Razorpay checkout alone never unlocks Pro');
     const checkoutTabEvent = context.waitForEvent('page'); await ui.locator('#upgrade').click();
     const checkoutTab = await checkoutTabEvent; await checkoutTab.waitForURL('https://pagepress-test.lemonsqueezy.com/buy/test-product');
     await checkoutTab.close(); await ui.bringToFront();
