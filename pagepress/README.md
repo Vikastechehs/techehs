@@ -27,7 +27,7 @@ After capture, change **Download format** and click **Download PDF** or **Downlo
 
 ## Quality
 
-- High uses the viewer's 200% render; Extra high uses 300%. Native canvas pixels are preserved as lossless PNG inside the PDF, without JPEG compression or downsampling.
+- High uses the viewer's 200% render; Extra high uses 300%. These are pixel densities: on high-density screens (Retina, 125%/150% Windows scaling) PagePress sets the viewer's zoom so the result is the same on every screen (about 1,587 / 2,380 px wide for an A4 page). Native canvas pixels are preserved as lossless PNG inside the PDF, without JPEG compression or downsampling.
 - JPEG preserves the captured image dimensions and uses 95% encoding quality on a white background. JPEG compression is lossy; the locally retained PNG source and PDF export remain lossless.
 - Capturing the full rendered canvas avoids viewport clipping, toolbar capture, scrollbar seams, and screen-sized resolution limits.
 - Visible extra page layers, such as DOM watermarks or annotations, use the bundled html2canvas renderer. The extension fails if those layers cannot be captured; it does not silently fall back to a canvas-only image that could omit them.

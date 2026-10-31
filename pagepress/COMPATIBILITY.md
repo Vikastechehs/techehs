@@ -17,6 +17,8 @@ Not supported, by design or browser rules: Chrome's built-in PDF viewer (use its
 
 For single-page viewers PagePress moves through pages with the viewer's own controls. It types into the page box or picks from the drop-down when there is one, and otherwise clicks Next or Previous. It waits until the new page's image has actually arrived, not just the counter, then returns the viewer to the page it started on.
 
+Tested real libraries: Mozilla's PDF.js viewer app 2.16-6.4 (including iframes, page mode, rotation, spreads, links and form fields), PhotoSwipe 5 (supported as a single-page viewer), a react-pdf-style canvas viewer (supported), and Viewer.js (partial: it has Next/Previous but no page counter, so only the page on screen can be saved).
+
 ## Running it
 
 Install once (Node 22 and Playwright's Chromium):
@@ -40,7 +42,7 @@ node tools/compat-check.cjs https://example.org/viewer?doc=123 https://example.o
 node tools/compat-check.cjs --file urls.txt
 ```
 
-Options: `--trial N` captures the first N pages (default 2, `0` = detect only); `--out DIR` (default `compat-results`); `--wait MS` waits extra after load (default 4000); `--headed` shows the browser in URL mode.
+Options: `--trial N` captures the first N pages (default 2, `0` = detect only); `--quality 2|3` (High or Extra high); `--dpr N` emulates a screen pixel ratio (2 = Retina, 1.25 or 1.5 = Windows display scaling); `--out DIR` (default `compat-results`); `--wait MS` waits extra after load (default 4000); `--headed` shows the browser in URL mode.
 
 A trial capture moves through pages and changes the zoom like a real capture, then restores them. Only check documents you are entitled to view.
 

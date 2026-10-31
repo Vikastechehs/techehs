@@ -45,12 +45,29 @@ function documentPdf() {
   return Buffer.from(pdf.output('arraybuffer'));
 }
 
+// 4 pages with clickable links on every page, and a text field plus a ticked check box on page 2.
+function formsPdf() {
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  for (let n = 1; n <= 4; n++) {
+    if (n > 1) pdf.addPage();
+    pdf.setFontSize(26); pdf.text('ANNOTATED PAGE ' + n, 40, 70); pdf.setFontSize(12);
+    for (let y = 110; y < 740; y += 24) pdf.text(`Line ${y} with ordinary text on page ${n}`, 40, y);
+    pdf.setTextColor(0, 0, 200); pdf.textWithLink('Open the registry website', 40, 760, { url: 'https://example.org/registry' }); pdf.link(300, 600, 200, 40, { pageNumber: 1 }); pdf.setTextColor(0, 0, 0);
+    if (n === 2) {
+      const field = new pdf.AcroFormTextField(); field.fieldName = 'applicant'; field.Rect = [40, 300, 240, 30]; field.value = 'Applicant name'; pdf.addField(field);
+      const box = new pdf.AcroFormCheckBox(); box.fieldName = 'agree'; box.Rect = [300, 300, 20, 20]; box.appearanceState = 'On'; pdf.addField(box);
+    }
+  }
+  return Buffer.from(pdf.output('arraybuffer'));
+}
+
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.pdf': 'application/pdf',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.properties': 'text/plain', '.ftl': 'text/plain', '.bcmap': 'application/octet-stream', '.pfb': 'application/octet-stream', '.ttf': 'font/ttf', '.wasm': 'application/wasm' };
-function serve(dirs, pdf) {
+function serve(dirs, pdf, forms = formsPdf()) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/document.pdf') { res.writeHead(200, { 'Content-Type': 'application/pdf' }); res.end(pdf); return; }
+    if (url.pathname === '/forms.pdf') { res.writeHead(200, { 'Content-Type': 'application/pdf' }); res.end(forms); return; }
     const match = /^\/v([^/]+)\/(.*)$/.exec(url.pathname);
     const base = match && dirs[match[1]];
     const file = base && path.resolve(base, decodeURIComponent(match[2]));
@@ -72,7 +89,8 @@ async function main() {
     const out = path.join(ARTIFACTS, 'compat');
     fs.rmSync(out, { recursive: true, force: true });
     const argv = process.argv;
-    process.argv = [argv[0], 'compat-check', '--out', out, '--wait', '6000', '--trial', '5', ...VERSIONS.map((v) => viewerUrl(origin, v))];
+    const formsUrl = (v) => `${origin}/v${v}/web/viewer.html?file=${encodeURIComponent('/forms.pdf')}`;
+    process.argv = [argv[0], 'compat-check', '--out', out, '--wait', '6000', '--trial', '5', ...VERSIONS.map((v) => viewerUrl(origin, v)), ...VERSIONS.map(formsUrl)];
     let reports;
     try { reports = await require('../tools/compat-check.cjs').main(); } finally { process.argv = argv; }
     for (const [i, version] of VERSIONS.entries()) {
@@ -86,6 +104,27 @@ async function main() {
       assert.ok(landscape.width > landscape.height, `${version}: page 4 must stay landscape`);
       assert.ok(Math.abs(landscape.width / landscape.height - 842 / 595) < 0.02, `${version}: page 4 proportions`);
       results.push({ version, checker: 'supported', sizes: r.trial.pages.map((p) => `${p.width}x${p.height}`) });
+      // Links and form fields: link-only pages take the normal path; the form page is drawn with its layer
+      // (text field, check box) at exactly the sheet's size, without the viewer's border.
+      const f = reports[VERSIONS.length + i];
+      assert.equal(f.verdict, 'supported', `${version} forms: ${JSON.stringify(f)}`); assert.equal(f.trial.error, null, `${version} forms: ${f.trial.error}`);
+      assert.deepEqual(f.trial.pages.map((p) => p.layered), [false, true, false, false], `${version}: only the form page needs the layer renderer`);
+      const widths = f.trial.pages.map((p) => p.width), heights = f.trial.pages.map((p) => p.height);
+      assert.ok(Math.max(...widths) - Math.min(...widths) <= 1 && Math.max(...heights) - Math.min(...heights) <= 1, `${version}: layered page has the sheet's exact size (${widths} x ${heights})`);
+    }
+
+    // 1b. High-density screens: quality is the same pixel density on every screen (Retina at Extra high used to
+    //     exceed the 32-million-pixel limit; 1.25x Windows laptops used to get 250% instead of 200%).
+    for (const [dpr, quality, width] of [['2', '3', 2381], ['1.25', '2', 1587]]) {
+      const dprOut = path.join(ARTIFACTS, `compat-dpr-${dpr}`);
+      fs.rmSync(dprOut, { recursive: true, force: true });
+      process.argv = [argv[0], 'compat-check', '--out', dprOut, '--wait', '6000', '--trial', '2', '--dpr', dpr, '--quality', quality, viewerUrl(origin, VERSIONS[0]), viewerUrl(origin, VERSIONS.at(-1))];
+      let dprReports;
+      try { dprReports = await require('../tools/compat-check.cjs').main(); } finally { process.argv = argv; }
+      for (const r of dprReports) {
+        assert.equal(r.trial?.error, null, `dpr ${dpr}: ${r.url}: ${r.trial?.error}`);
+        for (const p of r.trial.pages) assert.ok(Math.abs(p.width - width) <= 6, `dpr ${dpr} quality ${quality}: page ${p.number} is ${p.width}px wide, expected about ${width}`);
+      }
     }
 
     // 2. The real extension panel on the oldest and newest versions: capture all 7 pages at Extra high (300%),

@@ -8,7 +8,9 @@
     "test:browser": "node tests/browser.test.cjs",
     "test:compat": "node tests/compat.test.cjs",
     "check": "node tools/compat-check.cjs",
-    "test:pdfjs": "node tests/pdfjs-apps.test.cjs"
+    "test:pdfjs": "node tests/pdfjs-apps.test.cjs",
+    "test:real-libs": "node tests/real-libs.test.cjs",
+    "test:flows": "node tests/extension-flows.test.cjs"
   },
   "dependencies": {
     "fflate": "0.8.3",
@@ -16,6 +18,8 @@
     "jspdf": "^4.0.0"
   },
   "devDependencies": {
-    "pdfjs-dist": "^6.4.299"
+    "pdfjs-dist": "^6.4.299",
+    "photoswipe": "5.4.4",
+    "viewerjs": "1.11.7"
   }
 }

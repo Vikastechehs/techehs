@@ -8,6 +8,7 @@
 //                                                       captchas, logins), then press Enter to check it
 // Options: --trial N (capture the first N pages, default 2, 0 = detect only)  --out DIR (default compat-results)
 //          --wait MS (extra wait after load, default 4000)  --headed (show the browser in URL mode)
+//          --dpr N (emulate a screen pixel ratio, e.g. 2 for Retina; default 1)  --quality 2|3 (200% or 300%, default 2)
 //
 // A trial capture changes the page and zoom like a real capture, then restores them. Only check documents you
 // are entitled to view. Nothing is uploaded; reports and samples are written to --out.
@@ -20,7 +21,7 @@ const ROOT = path.resolve(__dirname, '..');
 const ENGINE = ['extension/vendor/html2canvas.min.js', 'extension/capture.js'].map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8'));
 
 function parseArgs(argv) {
-  const options = { urls: [], trial: 2, out: 'compat-results', wait: 4000, interactive: false, headed: false };
+  const options = { urls: [], trial: 2, out: 'compat-results', wait: 4000, interactive: false, headed: false, dpr: 1, zoom: 2 };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i], next = () => { if (i + 1 >= argv.length) throw new Error(`${arg} needs a value.`); return argv[++i]; };
     if (arg === '--file') options.urls.push(...fs.readFileSync(next(), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#')));
@@ -29,7 +30,9 @@ function parseArgs(argv) {
     else if (arg === '--wait') options.wait = Math.max(0, Number(next()) || 0);
     else if (arg === '--interactive') options.interactive = true;
     else if (arg === '--headed') options.headed = true;
-    else if (arg === '--help' || arg === '-h') { console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(1, 13).map((l) => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
+    else if (arg === '--quality') options.zoom = next() === '3' ? 3 : 2;
+    else if (arg === '--dpr') options.dpr = Math.max(1, Math.min(4, Number(next()) || 1));
+    else if (arg === '--help' || arg === '-h') { console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(1, 14).map((l) => l.replace(/^\/\/ ?/, '')).join('\n')); process.exit(0); }
     else if (/^https?:\/\//.test(arg)) options.urls.push(arg);
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -44,8 +47,8 @@ async function loadEngine(page) {
 }
 
 // Run the real capture engine for the first pages, collecting its messages instead of sending them to the panel.
-async function trialCapture(page, count, timeoutMs) {
-  return page.evaluate(async ({ count, timeoutMs }) => {
+async function trialCapture(page, count, timeoutMs, zoom = 2) {
+  return page.evaluate(async ({ count, timeoutMs, zoom }) => {
     const info = PagePressCapture.inspect(), pages = [], chunks = {};
     let finished = null;
     globalThis.PagePressTransport = async (message) => {
@@ -60,13 +63,13 @@ async function trialCapture(page, count, timeoutMs) {
     (function walk(win, depth) { windows.push(win); if (depth < 2) for (let i = 0; i < win.frames.length; i++) { try { void win.frames[i].document; walk(win.frames[i], depth + 1); } catch { /* cross-origin */ } } })(window, 0);
     const limit = (lift) => { for (const win of windows) for (const name of ['availWidth', 'availHeight']) { if (lift) Object.defineProperty(win.screen, name, { get: () => 32768, configurable: true }); else delete win.screen[name]; } };
     limit(true);
-    PagePressCapture.start({ id: 'compat-' + Date.now(), pages: numbers, zoom: 2, settleMs: 800, timeoutMs, sourceUrl: location.href });
+    PagePressCapture.start({ id: 'compat-' + Date.now(), pages: numbers, zoom, settleMs: 800, timeoutMs, sourceUrl: location.href });
     const started = Date.now();
     while (!finished && Date.now() - started < timeoutMs * (numbers.length + 1)) await new Promise((r) => setTimeout(r, 200));
     delete globalThis.PagePressTransport;
     limit(false);
     return { pages, error: finished ? finished.error : 'Timed out waiting for the trial capture.' };
-  }, { count, timeoutMs });
+  }, { count, timeoutMs, zoom });
 }
 
 async function check(page, index, options) {
@@ -75,7 +78,7 @@ async function check(page, index, options) {
     await loadEngine(page);
     Object.assign(report, await page.evaluate(() => PagePressCapture.diagnose()));
     if (options.trial && report.viewer && report.readable !== false) {
-      const trial = await trialCapture(page, options.trial, 30000);
+      const trial = await trialCapture(page, options.trial, 30000, options.zoom);
       report.trial = { error: trial.error || null, pages: trial.pages.map(({ data, ...p }) => p) };
       fs.mkdirSync(path.join(options.out, 'samples'), { recursive: true });
       for (const p of trial.pages) {
@@ -105,7 +108,8 @@ const line = (r) => `${String(r.index).padStart(2)}  ${r.verdict.toUpperCase().p
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const browser = await chromium.launch({ headless: !(options.interactive || options.headed) });
-  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1280, height: 900 }, acceptDownloads: false });
+  // --dpr emulates high-density screens (2 = Retina Mac, 1.25/1.5 = many Windows laptops).
+  const context = await browser.newContext({ bypassCSP: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: options.dpr, acceptDownloads: false });
   const reports = [];
   try {
     if (options.interactive) {
@@ -140,4 +144,4 @@ async function main() {
   return reports;
 }
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exit(1); });
-module.exports = { main, parseArgs };
+module.exports = { main, parseArgs, check };

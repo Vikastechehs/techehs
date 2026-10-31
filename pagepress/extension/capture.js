@@ -67,7 +67,21 @@
   const NEXT_HINT = /(^|[\s_-])next([\s_-]|$)|nextpage|arrow-?right|chevron-?right/i, PREV_HINT = /(^|[\s_-])prev(ious)?([\s_-]|$)|prevpage|arrow-?left|chevron-?left/i;
   // Carousels and banner sliders on portal home pages have their own Next buttons and "1 / 5" counters.
   const CAROUSEL = /carousel|slider|slick|swiper|splide|glide|owl-|banner|marquee|ticker/i;
-  const inCarousel = (el) => { for (let n = el; n && n.nodeType === 1; n = n.parentElement) { if (CAROUSEL.test(`${n.id} ${n.className?.baseVal ?? n.className}`) || n.getAttribute('aria-roledescription') === 'carousel') return true; } return false; };
+  // A carousel that fills most of the window is the viewer itself (lightboxes such as PhotoSwipe call themselves
+  // carousels for screen readers); only smaller ones are page decoration.
+  function inCarousel(el) {
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      if (!CAROUSEL.test(`${n.id} ${n.className?.baseVal ?? n.className}`) && n.getAttribute('aria-roledescription') !== 'carousel') continue;
+      const r = n.getBoundingClientRect(), win = n.ownerDocument.defaultView;
+      if (r.width < win.innerWidth * 0.6 || r.height < win.innerHeight * 0.6) return true;
+    }
+    return false;
+  }
+  // How much of an element is actually on screen; viewers keep neighbouring slides loaded just off screen.
+  function visibleArea(el) {
+    const r = el.getBoundingClientRect(), win = el.ownerDocument.defaultView;
+    return Math.max(0, Math.min(r.right, win.innerWidth) - Math.max(r.left, 0)) * Math.max(0, Math.min(r.bottom, win.innerHeight) - Math.max(r.top, 0));
+  }
   const COUNTER = /^\s*(?:page|pg\.?|पृष्ठ)?\s*(\d{1,5})\s*(?:of|\/|से|में से)\s*(\d{1,5})\s*$/i;
   const TOTAL_AFTER = /(?:^|[^\d/])(?:of|\/|से|में से)\s*(\d{1,5})(?![\d/.-])/i;
   const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
@@ -120,8 +134,8 @@
     return list.filter((c) => { const { current, total } = c.read(); return total >= 1 && total <= 10000 && current >= 1 && current <= total; });
   }
   function findPager(doc) {
-    const main = () => [...doc.querySelectorAll('img, canvas')].filter((el) => !isLazy(el) && pageShaped(el) && !inCarousel(el))
-      .sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.width * rb.height - ra.width * ra.height; })[0] || null;
+    const main = () => [...doc.querySelectorAll('img, canvas')].filter((el) => !isLazy(el) && pageShaped(el) && !inCarousel(el) && visibleArea(el) > 0)
+      .sort((a, b) => visibleArea(b) - visibleArea(a))[0] || null;
     const first = main();
     if (!first) return null;
     const next = findControl(doc, NEXT, NEXT_HINT, first), prev = findControl(doc, PREV, PREV_HINT, first);
@@ -145,7 +159,12 @@
       // One page image: a pager if it has Next/Previous controls and a counter, otherwise a one-page document.
       const pager = findPager(doc);
       if (pager) return pager;
-      single ||= list;
+      if (list && !single) {
+        // Next/Previous without any page counter: PagePress cannot tell how many pages there are.
+        const shown = list.pages()[0];
+        list.noCounter = !!shown && !!(findControl(doc, NEXT, NEXT_HINT, shown) || findControl(doc, PREV, PREV_HINT, shown));
+        single = list;
+      }
     }
     return single;
   }
@@ -162,7 +181,8 @@
       const pages = found.pages(), first = pages.find((el) => !isLazy(el));
       const top = pages.findIndex((el) => el.getBoundingClientRect().bottom > 0);
       return { title: document.title, url: location.href, total: pages.length, current: Math.max(1, top + 1), zoomControl: false, fixedResolution: true,
-        sample: first && sourceSize(first), viewer: found.tag === 'IMG' ? 'Image page viewer' : 'Canvas page viewer' };
+        sample: first && sourceSize(first), viewer: found.tag === 'IMG' ? 'Image page viewer' : 'Canvas page viewer',
+        limitation: found.noCounter ? 'This viewer shows one page at a time with Next/Previous but no page counter, so PagePress can only save the page on screen.' : '' };
     }
     const input = found.doc.querySelector('#pageNumber');
     const counter = found.doc.querySelector('#numPages');
@@ -193,6 +213,16 @@
     }
     select.value = String(value);
     select.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  // The PDF.js page that fills most of the viewer's visible area.
+  function visiblePage(found) {
+    const box = found.container.getBoundingClientRect();
+    let best = null, bestHeight = 0;
+    for (const page of found.viewer.querySelectorAll('.page[data-page-number]')) {
+      const r = page.getBoundingClientRect(), height = Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top);
+      if (height > bestHeight) { bestHeight = height; best = Number(page.dataset.pageNumber); }
+    }
+    return best;
   }
   function navigate(found, number) {
     const input = found.doc.querySelector('#pageNumber');
@@ -241,7 +271,13 @@
         if (content && !['none', 'normal', '""'].includes(content)) return true;
       }
     }
-    return [...page.children].some((e) => !e.matches('.canvasWrapper,.textLayer') && visible(e) && (e.childElementCount || e.textContent.trim()));
+    // Link areas in PDF.js's annotation layer are invisible click targets, and comment popups stay hidden until
+    // hovered; neither changes how the page looks, so they do not need the slower layer renderer.
+    const meaningful = (e) => {
+      if (!e.matches('.annotationLayer')) return true;
+      return [...e.children].some((section) => visible(section) && !section.matches('.linkAnnotation, .popupAnnotation, .popupTriggerArea') && (section.childElementCount || section.textContent.trim()));
+    };
+    return [...page.children].some((e) => !e.matches('.canvasWrapper,.textLayer') && visible(e) && (e.childElementCount || e.textContent.trim()) && meaningful(e));
   }
   async function renderLayers(page, source, job) {
     if (typeof html2canvas !== 'function') throw new Error('Document layer renderer is unavailable. Reload the extension.');
@@ -253,8 +289,12 @@
       try { const ctx = probe.getContext('2d'); ctx.drawImage(image, 0, 0, 1, 1); ctx.getImageData(0, 0, 1, 1); }
       catch { throw new Error('A visible document image is blocked by browser origin rules and cannot be preserved.'); }
     }
-    const rect = page.getBoundingClientRect();
+    const rect = page.getBoundingClientRect(), sourceRect = source.getBoundingClientRect();
     const token = `pp-${crypto.randomUUID()}`;
+    // Form check boxes and radio buttons: html2canvas cannot parse some viewers' styling for them (PDF.js 2.x
+    // fails with "Error parsing CSS component value"), so the copy it draws shows them as plain boxes with
+    // ✓ or ● when selected.
+    const choices = [...page.querySelectorAll('input[type="checkbox"], input[type="radio"]')].map((input) => ({ checked: input.checked, radio: input.type === 'radio', rect: input.getBoundingClientRect() }));
     page.setAttribute('data-pagepress-target', token);
     const scale = Math.max(1, source.width / Math.max(1, rect.width));
     const variables = [...getComputedStyle(page)].filter((name) => name.startsWith('--')).map((name) => [name, getComputedStyle(page).getPropertyValue(name)]);
@@ -272,12 +312,25 @@
           }
           target.style.setProperty('width', rect.width + 'px', 'important');
           target.style.setProperty('height', rect.height + 'px', 'important');
+          [...target.querySelectorAll('input[type="checkbox"], input[type="radio"]')].forEach((input, i) => {
+            const choice = choices[i]; if (!choice) return;
+            const box = cloned.createElement('span'), size = Math.max(6, Math.min(choice.rect.width, choice.rect.height));
+            box.textContent = choice.checked ? (choice.radio ? '●' : '✓') : '';
+            box.style.cssText = `display:inline-block;box-sizing:border-box;width:${choice.rect.width}px;height:${choice.rect.height}px;border:1px solid #444;border-radius:${choice.radio ? '50%' : '2px'};background:#fff;color:#000;font:bold ${Math.round(size * 0.8)}px/${choice.rect.height}px Arial,sans-serif;text-align:center;overflow:hidden;`;
+            input.replaceWith(box);
+          });
           for (const [name, value] of variables) target.style.setProperty(name, value);
         }
       });
-      let timer;
-      try { return await Promise.race([task, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Document layers took too long to capture.')), job.config.timeoutMs); })]); }
+      let timer, rendered;
+      try { rendered = await Promise.race([task, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Document layers took too long to capture.')), job.config.timeoutMs); })]); }
       finally { clearTimeout(timer); }
+      // Keep only the sheet itself (the page canvas's area), not the viewer's border and shadow around it.
+      const output = page.ownerDocument.createElement('canvas'); output.width = source.width; output.height = source.height;
+      const ctx = output.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, output.width, output.height);
+      ctx.drawImage(rendered, (sourceRect.left - rect.left) * scale, (sourceRect.top - rect.top) * scale, sourceRect.width * scale, sourceRect.height * scale, 0, 0, output.width, output.height);
+      rendered.width = 1; rendered.height = 1;
+      return output;
     } finally { page.removeAttribute('data-pagepress-target'); }
   }
   // Identity of what an image or canvas currently shows, to tell a newly loaded page from the previous one.
@@ -435,10 +488,15 @@
       let oldZoom = select?.value;
       if (oldZoom === 'custom') oldZoom = String(parseFloat(select.selectedOptions[0].textContent.replace(/[^\d.]/g, '')) / 100);
       original = { page: Number(found.doc.querySelector('#pageNumber')?.value) || 1, zoom: oldZoom, left: found.container.scrollLeft, top: found.container.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
+      // Quality is a pixel density, not a screen zoom: viewers already multiply by the screen's pixel ratio, so a
+      // Retina screen (2x) reaches "200%" pixels at 100% zoom. Dividing keeps High/Extra high identical on every
+      // screen and keeps A4 at Extra high under the 32-million-pixel limit on high-density displays.
+      const ratio = found.doc.defaultView.devicePixelRatio || 1;
+      const target = String(Math.round(job.config.zoom / ratio * 1000) / 1000);
       // Already at the target zoom: step away first so the viewer redraws every page at full size (needed after
       // the panel lifts the PDF.js 5+ screen-size canvas limit).
-      if (select && select.value === String(job.config.zoom)) { zoom(found, '1'); await sleep(250); }
-      zoom(found, job.config.zoom);
+      if (select && select.value === target) { zoom(found, target === '1' ? '1.5' : '1'); await sleep(250); }
+      zoom(found, target);
       for (const number of job.config.pages) {
         check(job); job.current = number;
         await notify(job, 'progress', { number, phase: 'loading' });
@@ -454,11 +512,23 @@
           // Restoring is capped at 15 seconds so a stopped capture always finishes promptly.
           if (found.type === 'pager' && original.page) await goToPage(found, original.page, { cancelled: false, abortAt: performance.now() + 15000, config: { ...job.config, timeoutMs: 5000 } });
           if (found.type === 'pdfjs') {
-            if (original.zoom) zoom(found, original.zoom);
-            navigate(found, original.page);
-            await sleep(250);
-          }
-          (found.type === 'pdfjs' ? found.container : found.scroller).scrollTo({ left: original.left, top: original.top, behavior: 'instant' });
+            // PDF.js applies a zoom change a moment later and keeps the page it was on in view, which can undo an
+            // immediate jump back. Wait for the zoom to settle, then repeat the jump until the viewer reports the
+            // original page (up to about 5 seconds).
+            // The page box only echoes what was typed, so success is judged by the page actually on screen.
+            if (original.zoom) { zoom(found, original.zoom); await sleep(500); }
+            // First try the exact scroll position; if that does not show the original page (the layout can differ
+            // after zooming back), jump to the page itself and keep it.
+            for (let attempt = 0, confirmed = 0; attempt < 12 && confirmed < 2; attempt++) {
+              if (visiblePage(found) === original.page) confirmed++;
+              else {
+                confirmed = 0;
+                if (attempt === 0) found.container.scrollTo({ left: original.left, top: original.top, behavior: 'instant' });
+                else navigate(found, original.page);
+              }
+              await sleep(400);
+            }
+          } else found.scroller.scrollTo({ left: original.left, top: original.top, behavior: 'instant' });
           found.doc.defaultView.scrollTo({ left: original.windowX, top: original.windowY, behavior: 'instant' });
         } catch { /* A user can close or replace the document during restoration. */ }
       }
@@ -488,6 +558,7 @@
     if (!sharp && !(found.type === 'pdfjs' && report.zoomControl)) report.notes.push(`Sample page is ${report.sample.width} x ${report.sample.height} px, below the 1,200 px clear-print guide. ${found.type === 'pdfjs' ? 'Try a higher zoom.' : 'This is the source image\'s own resolution.'}`);
     // PDF.js pages below 1,200 px are refused at capture unless the viewer zooms; page lists keep native pixels with a warning.
     report.verdict = found.type === 'pdfjs' ? (report.zoomControl || sharp ? 'supported' : 'partial') : sharp ? 'supported' : 'partial';
+    if (found.noCounter) { report.verdict = 'partial'; report.notes.push('This viewer shows one page at a time with Next/Previous but no page counter, so PagePress can only save the page on screen.'); }
     return report;
   }
   const api = {

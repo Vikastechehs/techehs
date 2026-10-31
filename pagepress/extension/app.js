@@ -90,7 +90,7 @@
       if (!job) { $('from').value = 1; $('to').value = Math.min(source.total, PagePressBilling.pageLimit); $('filename').value = core.filename(source.title, $('format').value); setState('ready'); }
       if (result.running && job?.id !== result.running.id) throw new Error('Another capture is already running in this tab.');
       if (result.running && job?.id === result.running.id) { job.status = 'capturing'; busy = true; await store.saveJob(job); setState('capturing'); }
-      log(`Connected: ${source.total} document pages.`); notice('');
+      log(`Connected: ${source.total} document pages.`); notice(source.limitation || '');
     } catch (error) { source = null; notice(error.message, true); if (!job) setState('Not connected'); }
     finally { detecting = false; controls(); }
   }

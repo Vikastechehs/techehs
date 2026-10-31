@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.8.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.9.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -63,6 +63,24 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 ## Delivery expectations
 
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
+
+## Changes in 0.9.0: wider real-world testing and fixes
+
+New tests against real software, and the bugs they found:
+- **Screen pixel ratio.** Viewers multiply their zoom by the screen's pixel ratio, so "High (200%)" gave 400% pixels on a Retina Mac. Extra high then exceeded the 32-million-pixel limit for A4 and failed. On 1.25x Windows laptops it gave 250%. PagePress now divides the zoom by the pixel ratio, so High is about 1,587 px and Extra high about 2,380 px for A4 on every screen. The checker has new `--dpr` and `--quality` options.
+- **PDFs with links and form fields.**
+  - Link-only annotation layers no longer trigger the slower html2canvas path.
+  - Check boxes and radio buttons are drawn as plain boxes in html2canvas's copy, because html2canvas crashed on PDF.js 2.x form styling.
+  - Layered pages are cropped to the sheet, without the viewer's border.
+  - Tested on all five official PDF.js releases.
+- **PhotoSwipe** (real library): its full-screen lightbox calls itself a carousel, so the banner-carousel filter hid it, and the pager picked a preloaded off-screen neighbour slide. Only carousels smaller than 60% of the window are now ignored, and the pager picks the most visible page image.
+- **Viewer.js** (real library): Next/Previous without any page counter is now reported as partial ("can only save the page on screen") instead of "supported, 1 page", and the panel shows that note.
+- **Restoring the view after Stop/Retry on PDF.js:** PDF.js applies zoom changes a moment later and could leave the viewer on the page where the capture stopped. Success is now judged by the page actually on screen; the exact scroll position is tried first, then the page itself.
+- **New tests:**
+  - `tests/real-libs.test.cjs`: PhotoSwipe 5.4.4, Viewer.js 1.11.7, a react-pdf-style PDF.js canvas viewer, and the PDF.js app in an iframe, page mode, rotated and in spreads.
+  - `tests/extension-flows.test.cjs`: loads the packaged ZIP on a Retina screen with a 60-page document; covers Stop, Retry, PDF, JPEG ZIP and single JPEG.
+  - `server/test/process.test.cjs`: real server process; restart persistence, headers, bad input, Razorpay unreachable, SIGTERM.
+  - `tests/pdfjs-apps.test.cjs` now also covers a links-and-forms document and pixel ratios.
 
 ## Changes in 0.8.0: real PDF.js releases and independent review fixes
 

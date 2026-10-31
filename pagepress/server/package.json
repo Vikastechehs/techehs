@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
-    "test": "node --disable-warning=ExperimentalWarning --test test/server.test.cjs",
+    "test": "node --disable-warning=ExperimentalWarning --test test/server.test.cjs test/process.test.cjs",
     "test:pages": "node --disable-warning=ExperimentalWarning test/pages.browser.cjs"
   }
 }
