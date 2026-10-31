@@ -23,14 +23,22 @@
   const MIN_SOURCE = 800;
   const LAZY_ATTRS = ['data-src', 'data-original', 'data-lazy-src', 'data-url'];
   const sourceSize = (el) => (el.tagName === 'IMG' ? { width: el.naturalWidth, height: el.naturalHeight } : { width: el.width, height: el.height });
-  const isLazy = (el) => el.tagName === 'IMG' && sourceSize(el).width < MIN_SOURCE && LAZY_ATTRS.some((a) => el.hasAttribute(a));
+  // An image that has not loaded yet but holds a page slot: a lazy-loading placeholder, native loading="lazy", or
+  // an image still downloading inside a page-sized box.
+  function isLazy(el) {
+    if (el.tagName !== 'IMG' || (el.complete && el.naturalWidth >= MIN_SOURCE)) return false;
+    if (LAZY_ATTRS.some((a) => el.hasAttribute(a)) && el.naturalWidth < MIN_SOURCE) return true;
+    if (el.complete && el.naturalWidth > 0) return false;
+    const rect = el.getBoundingClientRect();
+    return el.loading === 'lazy' || (rect.width >= 120 && rect.height >= 80);
+  }
   function pageShaped(el) {
     if (isLazy(el)) return true;
     const { width, height } = sourceSize(el), rect = el.getBoundingClientRect();
     return width >= MIN_SOURCE && height >= 200 && height / width > 0.25 && height / width < 4 && rect.width >= 120 && rect.height >= 80;
   }
   function findPageList(doc) {
-    const candidates = [...doc.querySelectorAll('img, canvas')].filter(pageShaped);
+    const candidates = [...doc.querySelectorAll('img, canvas')].filter((el) => pageShaped(el) && !inCarousel(el));
     if (!candidates.length) return null;
     // Group by parent, or by grandparent when each page sits in its own wrapper; take the largest group.
     const groups = new Map();
@@ -39,7 +47,7 @@
     for (const [key, members] of groups) if (members.length > best.length || (members.length === best.length && key.contains(container))) { container = key; best = members; }
     const tag = best.filter((el) => el.tagName === 'IMG').length * 2 >= best.length ? 'IMG' : 'CANVAS';
     if (!best.some((el) => el.tagName === tag && !isLazy(el))) return null;
-    const pages = () => [...container.querySelectorAll(tag.toLowerCase())].filter(pageShaped);
+    const pages = () => [...container.querySelectorAll(tag.toLowerCase())].filter((el) => pageShaped(el) && !inCarousel(el));
     return { type: 'pagelist', doc, container, tag, pages, scroller: scrollParent(best[0]) };
   }
   function scrollParent(el) {
@@ -52,53 +60,80 @@
   // Single-image pagers: one large page image or canvas, Next/Previous controls, and a visible page counter
   // ("Page 3 of 12", "3 / 12", a page-number box, or a page drop-down). Pages are reached through the viewer's
   // own controls and saved at the image's native resolution.
-  // A label matches by its words with arrows and punctuation removed ("Next ›", "« Previous"), or as a bare arrow.
-  const NEXT = { words: /^(next( page)?|आगे|अगला( पृष्ठ)?)$/i, arrows: /^[›»>→▶⟩]+$/ }, PREV = { words: /^(prev(ious)?( page)?|back|पीछे|पिछला( पृष्ठ)?)$/i, arrows: /^[‹«<←◀⟨]+$/ };
-  const labelIs = (label, kind) => { const core = label.replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); return core ? kind.words.test(core) : kind.arrows.test(label.replace(/\s+/g, '')); };
+  // A label matches by its words with arrows and punctuation removed ("Next ›", "‹ Previous"), or as a bare arrow.
+  // Marks (\p{M}) are kept so Devanagari words such as आगे keep their vowel signs. » and « usually mean First/Last.
+  const NEXT = { words: /^(next( page)?|आगे|अगला( पृष्ठ)?)$/i, arrows: /^[›>→▶⟩]$/ }, PREV = { words: /^(prev(ious)?( page)?|back|पीछे|पिछला( पृष्ठ)?)$/i, arrows: /^[‹<←◀⟨]$/ };
+  const labelIs = (label, kind) => { const core = label.replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim(); return core ? kind.words.test(core) : kind.arrows.test(label.replace(/\s+/g, '')); };
   const NEXT_HINT = /(^|[\s_-])next([\s_-]|$)|nextpage|arrow-?right|chevron-?right/i, PREV_HINT = /(^|[\s_-])prev(ious)?([\s_-]|$)|prevpage|arrow-?left|chevron-?left/i;
+  // Carousels and banner sliders on portal home pages have their own Next buttons and "1 / 5" counters.
+  const CAROUSEL = /carousel|slider|slick|swiper|splide|glide|owl-|banner|marquee|ticker/i;
+  const inCarousel = (el) => { for (let n = el; n && n.nodeType === 1; n = n.parentElement) { if (CAROUSEL.test(`${n.id} ${n.className?.baseVal ?? n.className}`) || n.getAttribute('aria-roledescription') === 'carousel') return true; } return false; };
   const COUNTER = /^\s*(?:page|pg\.?|पृष्ठ)?\s*(\d{1,5})\s*(?:of|\/|से|में से)\s*(\d{1,5})\s*$/i;
+  const TOTAL_AFTER = /(?:^|[^\d/])(?:of|\/|से|में से)\s*(\d{1,5})(?![\d/.-])/i;
+  const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+  const distance = (a, b) => { const [ax, ay] = centre(a), [bx, by] = centre(b); return Math.hypot(ax - bx, ay - by); };
+  const nearest = (list, target) => list.sort((a, b) => distance(a.el || a, target) - distance(b.el || b, target))[0] || null;
   function controlLabel(el) {
     return [el.textContent, el.getAttribute('aria-label'), el.title, el.value, el.querySelector?.('img')?.alt].map((v) => String(v || '').trim()).filter(Boolean);
   }
-  function findControl(doc, exact, hint, near) {
+  const unavailable = (el) => el.disabled || el.getAttribute('aria-disabled') === 'true';
+  // Find the Next or Previous control nearest the page. A disabled one still counts for detection (a viewer opened
+  // on its last page has a disabled Next), but only an enabled one is pressed.
+  function findControl(doc, kind, hint, near) {
     const candidates = [...doc.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="image"], input[type="submit"]')].filter((el) => {
-      if (el.disabled || el.getAttribute('aria-disabled') === 'true' || !el.getClientRects().length) return false;
+      if (!el.getClientRects().length || inCarousel(el)) return false;
       const labels = controlLabel(el);
-      return labels.some((l) => l.length <= 24 && labelIs(l, exact)) || hint.test(`${el.id} ${el.className?.baseVal ?? el.className} ${el.getAttribute('aria-label') || ''} ${el.title || ''}`);
+      return labels.some((l) => l.length <= 24 && labelIs(l, kind)) || hint.test(`${el.id} ${el.className?.baseVal ?? el.className} ${el.getAttribute('aria-label') || ''} ${el.title || ''}`);
     });
-    const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
-    const [x, y] = centre(near);
-    return candidates.sort((a, b) => Math.hypot(...centre(a).map((v, i) => v - [x, y][i])) - Math.hypot(...centre(b).map((v, i) => v - [x, y][i])))[0] || null;
+    return nearest(candidates, near);
   }
-  // A link that loads another web page cannot be followed: the capture runs inside the current page.
-  const reloads = (el) => el?.tagName === 'A' && el.getAttribute('href') && !/^(#|javascript:)/i.test(el.getAttribute('href').trim()) && new URL(el.href, location.href).href.split('#')[0] !== el.ownerDocument.location.href.split('#')[0];
-  function counterOf(doc) {
+  // Controls that load another web page cannot be followed: the capture runs inside the current page. This covers
+  // ordinary links, ASP.NET __doPostBack links, and explicit submit buttons.
+  function reloads(el) {
+    if (!el) return false;
+    if (el.tagName === 'A') {
+      const href = (el.getAttribute('href') || '').trim();
+      if (/^javascript:\s*__doPostBack/i.test(href)) return true;
+      return !!href && !/^(#|javascript:)/i.test(href) && new URL(el.href, location.href).href.split('#')[0] !== el.ownerDocument.location.href.split('#')[0];
+    }
+    if (el.matches('input[type="submit"], input[type="image"], button[type="submit"]')) return !!el.form;
+    return false;
+  }
+  function counters(doc) {
+    const list = [];
     for (const select of doc.querySelectorAll('select')) {
       const values = [...select.options].map((o) => Number(o.value || o.textContent));
-      if (values.length >= 2 && values.every((v, i) => v === i + 1)) return { kind: 'select', el: select, read: () => ({ current: Number(select.value), total: select.options.length }) };
+      if (values.length >= 2 && values.every((v, i) => v === i + 1) && select.getClientRects().length && !inCarousel(select)) list.push({ kind: 'select', el: select, read: () => ({ current: Number(select.value), total: select.options.length }) });
     }
     for (const input of doc.querySelectorAll('input:not([type]), input[type="text"], input[type="number"], input[type="tel"]')) {
-      const after = (input.parentElement?.textContent || '') + ' ' + (input.nextElementSibling?.textContent || '');
-      const total = /(?:of|\/|से|में से)\s*(\d{1,5})/i.exec(after)?.[1];
-      if (total && /^\d+$/.test(input.value.trim())) return { kind: 'input', el: input, read: () => ({ current: Number(input.value), total: Number(/(?:of|\/|से|में से)\s*(\d{1,5})/i.exec((input.parentElement?.textContent || '') + ' ' + (input.nextElementSibling?.textContent || ''))?.[1]) }) };
+      const totalOf = () => Number(TOTAL_AFTER.exec((input.parentElement?.textContent || '') + ' ' + (input.nextElementSibling?.textContent || ''))?.[1]);
+      if (totalOf() && /^\d{1,5}$/.test(input.value.trim()) && input.getClientRects().length && !inCarousel(input)) list.push({ kind: 'input', el: input, read: () => ({ current: Number(input.value), total: totalOf() }) });
     }
     const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_ELEMENT);
     for (let el = walker.nextNode(); el; el = walker.nextNode()) {
-      if (el.childElementCount > 2 || el.textContent.length > 40 || !COUNTER.test(el.textContent) || !el.getClientRects().length) continue;
-      return { kind: 'text', el, read: () => { const m = COUNTER.exec(el.textContent) || []; return { current: Number(m[1]), total: Number(m[2]) }; } };
+      if (el.childElementCount > 2 || el.textContent.length > 40 || !COUNTER.test(el.textContent) || !el.getClientRects().length || inCarousel(el)) continue;
+      // Keep the innermost element showing the counter, not every wrapper around it.
+      if (list.some((c) => c.kind === 'text' && el.contains(c.el))) continue;
+      for (let i = list.length - 1; i >= 0; i--) if (list[i].kind === 'text' && list[i].el.contains(el)) list.splice(i, 1);
+      list.push({ kind: 'text', el, read: () => { const m = COUNTER.exec(el.textContent) || []; return { current: Number(m[1]), total: Number(m[2]) }; } });
     }
-    return null;
+    return list.filter((c) => { const { current, total } = c.read(); return total >= 1 && total <= 10000 && current >= 1 && current <= total; });
   }
   function findPager(doc) {
-    const main = () => [...doc.querySelectorAll('img, canvas')].filter((el) => !isLazy(el) && pageShaped(el))
+    const main = () => [...doc.querySelectorAll('img, canvas')].filter((el) => !isLazy(el) && pageShaped(el) && !inCarousel(el))
       .sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.width * rb.height - ra.width * ra.height; })[0] || null;
     const first = main();
     if (!first) return null;
-    const next = findControl(doc, NEXT, NEXT_HINT, first), prev = findControl(doc, PREV, PREV_HINT, first), counter = counterOf(doc);
-    if (!next || !counter) return null;
-    const state = counter.read();
-    if (!(state.total >= 1 && state.total <= 10000 && state.current >= 1 && state.current <= state.total)) return null;
-    return { type: 'pager', doc, main, next, prev, counter, tag: first.tagName, reloads: reloads(next) || reloads(prev), scroller: scrollParent(first) };
+    const next = findControl(doc, NEXT, NEXT_HINT, first), prev = findControl(doc, PREV, PREV_HINT, first);
+    if (!next && !prev) return null;
+    // The counter that belongs to this viewer is the one nearest its Next/Previous controls.
+    const all = counters(doc), counter = nearest(all, next || prev);
+    if (!counter) return null;
+    // A visible text counter is the viewer's own report of the page; a page box or drop-down may only echo what
+    // PagePress typed into it, so navigation is also confirmed by the picture changing.
+    const display = counter.kind === 'text' ? counter : nearest(all.filter((c) => c.kind === 'text'), next || prev);
+    const control = (forward) => { const el = findControl(doc, forward ? NEXT : PREV, forward ? NEXT_HINT : PREV_HINT, main() || first) || (forward ? next : prev); return el && !unavailable(el) ? el : null; };
+    return { type: 'pager', doc, main, control, counter, display, tag: first.tagName, reloads: reloads(next) || reloads(prev), scroller: scrollParent(first) };
   }
   function findViewer() {
     const docs = documents();
@@ -119,7 +154,7 @@
     if (!found) throw new Error('No supported document viewer found. Open the document viewer tab, then click PagePress. Chrome\'s built-in PDF viewer is not supported.');
     if (found.type === 'pager') {
       if (found.reloads) throw new Error('This viewer loads a new web page for each page, which PagePress cannot follow. Capture is not supported here.');
-      const { current, total } = found.counter.read();
+      const { current, total } = (found.display || found.counter).read();
       return { title: document.title, url: location.href, total, current, zoomControl: false, fixedResolution: true, sample: sourceSize(found.main()),
         viewer: found.tag === 'IMG' ? 'Single-page image viewer' : 'Single-page canvas viewer' };
     }
@@ -136,9 +171,12 @@
     if (!total || total > 10000) throw new Error('Cannot determine a supported document page count.');
     return { title: document.title, url: location.href, total, current: Number(input?.value) || numbers[0] || 1, zoomControl: !!found.doc.querySelector('#scaleSelect'), viewer: 'PDF.js-compatible viewer' };
   }
+  // The document is identified by its address without the #fragment, which viewers often update per page.
+  const sameDocument = (a, b) => String(a).split('#')[0] === String(b).split('#')[0];
   function check(job) {
     if (job.cancelled) throw new Error('Capture stopped. Saved pages are retained.');
-    if (location.href !== job.config.sourceUrl) throw new Error('The source tab navigated to another document. Capture stopped.');
+    if (job.abortAt && performance.now() > job.abortAt) throw new Error('Restoring the viewer took too long.');
+    if (!sameDocument(location.href, job.config.sourceUrl)) throw new Error('The source tab navigated to another document. Capture stopped.');
   }
   async function notify(job, type, payload = {}) {
     // PagePressTransport lets the compatibility checker run this engine outside the extension. Page scripts cannot
@@ -257,48 +295,60 @@
     while (performance.now() - start < ms) { if (test()) return true; await sleep(100); }
     return test();
   }
+  // The page the viewer reports: its visible text counter when there is one, otherwise the page box or drop-down.
+  const pageOf = (found) => (found.display || found.counter).read().current;
   // Reach page `number` through the viewer's own controls: type it into a page box or pick it from a drop-down
-  // when the viewer has one, otherwise step with Next/Previous.
+  // when the viewer has one, otherwise step with Next/Previous. Every move must show up both in the counter and in
+  // the picture, so a box that only echoes what was typed, or a counter that runs ahead of slow images, cannot
+  // put the wrong page under a number. Returns the picture shown just before the final move (null if no move).
   async function goToPage(found, number, job) {
-    const at = () => found.counter.read().current;
-    if (at() === number) return;
-    const { kind, el } = found.counter;
+    if (pageOf(found) === number) return null;
+    const { kind, el } = found.counter, half = job.config.timeoutMs / 2;
     if (kind === 'input' || kind === 'select') {
-      const view = el.ownerDocument.defaultView;
+      const before = identity(found.main()), previous = el.value, view = el.ownerDocument.defaultView;
       if (kind === 'input') { el.focus(); el.value = String(number); el.dispatchEvent(new view.Event('input', { bubbles: true })); }
       else el.value = String(number);
       el.dispatchEvent(new view.Event('change', { bubbles: true }));
       if (kind === 'input') for (const type of ['keydown', 'keypress', 'keyup']) el.dispatchEvent(new view.KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-      if (await until(() => at() === number, 3000)) return;
+      if (await until(() => { check(job); return (!found.display || found.display.read().current === number) && identity(found.main()) !== before; }, half)) return before;
+      // The viewer did not act on the typed value: put the box back and step with Next/Previous instead.
+      el.value = previous;
     }
-    for (let steps = 0; at() !== number; steps++) {
+    let before = null;
+    for (let steps = 0; pageOf(found) !== number; steps++) {
       check(job);
-      const forward = at() < number, control = forward ? found.next : found.prev;
-      if (!control || steps > found.counter.read().total + 2) throw new Error(`Could not reach page ${number} with the viewer's ${forward ? 'Next' : 'Previous'} button.`);
-      const before = at();
+      const current = pageOf(found), forward = current < number, control = found.control(forward);
+      if (!control || steps > (found.display || found.counter).read().total + 2) throw new Error(`Could not reach page ${number} with the viewer's ${forward ? 'Next' : 'Previous'} button.`);
+      before = identity(found.main());
       press(control);
-      if (!await until(() => at() !== before, job.config.timeoutMs)) throw new Error(`The viewer did not move past page ${before}. Retry with Slow viewer timing.`);
+      if (!await until(() => { check(job); return pageOf(found) !== current; }, job.config.timeoutMs)) throw new Error(`The viewer did not move past page ${current}. Retry with Slow viewer timing.`);
+      // Let this page's picture arrive before the next step (two identical pages in a row give up after a while).
+      await until(() => { check(job); return identity(found.main()) !== before; }, half);
     }
+    return before;
   }
   async function capturePagerItem(found, number, job) {
-    const before = identity(found.main());
-    await goToPage(found, number, job);
-    // The counter often changes before the new image arrives: wait for different pixels (or, for two identical
-    // pages in a row, half the timeout) so the previous page is never saved under the new number.
-    const changedAt = performance.now();
-    return captureElement(number, job, () => {
-      if (found.counter.read().current !== number) throw new Error(`The viewer left page ${number} during capture.`);
+    const before = await goToPage(found, number, job);
+    const moved = performance.now(); let duplicate = false;
+    const page = await captureElement(number, job, () => {
+      if (pageOf(found) !== number) throw new Error(`The viewer left page ${number} during capture.`);
       const el = found.main();
-      return el && (identity(el) !== before || before === '' || performance.now() - changedAt > job.config.timeoutMs / 2) ? el : null;
+      if (!el || before === null || identity(el) !== before) return el;
+      // The picture never changed: either two identical pages, or a viewer that ignored the move. Save it with a
+      // warning rather than silently.
+      if (performance.now() - moved > job.config.timeoutMs / 2) { duplicate = true; return el; }
+      return null;
     }, found.doc);
+    return duplicate ? { ...page, warning: 'This page looks identical to the previous one. Check it before relying on the export.' } : page;
   }
   async function capturePageListItem(found, number, job) {
-    let current;
+    // The page list is fixed when the capture starts, so later loading or hiding of images cannot renumber pages.
+    const el = found.frozen[number - 1];
+    if (!el) throw new Error(`Page ${number} is not in this viewer.`);
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
     return captureElement(number, job, () => {
-      const pages = found.pages();
-      if (pages.length < number) throw new Error(`Page ${number} is no longer in this viewer. Reload the document and retry.`);
-      if (current !== pages[number - 1]) { current = pages[number - 1]; current.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); }
-      return current;
+      if (!el.isConnected) throw new Error('The viewer replaced its pages during capture. Reload the document and retry.');
+      return el;
     }, found.doc);
   }
   // Wait until pick() returns a loaded, stable page element, then save its native pixels.
@@ -308,7 +358,8 @@
       check(job);
       el = pick();
       if (el !== previous) { previous = el; last = ''; stableAt = performance.now(); }
-      const size = el ? sourceSize(el) : { width: 0, height: 0 }, ready = el && (el.tagName !== 'IMG' || el.complete) && size.width >= MIN_SOURCE && size.height > 0;
+      // Lazy placeholders are tiny; anything 200 px or wider that has loaded is the page itself.
+      const size = el ? sourceSize(el) : { width: 0, height: 0 }, ready = el && (el.tagName !== 'IMG' || el.complete) && size.width >= 200 && size.height >= 200;
       if (ready) {
         let probe;
         try { probe = fingerprint(el); } catch {
@@ -371,7 +422,8 @@
       found = findViewer(); if (!found) throw new Error('The document viewer is no longer available.');
       if (found.type !== 'pdfjs') {
         if (found.reloads) throw new Error('This viewer loads a new web page for each page, which PagePress cannot follow.');
-        original = { page: found.type === 'pager' ? found.counter.read().current : null, left: found.scroller.scrollLeft, top: found.scroller.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
+        original = { page: found.type === 'pager' ? pageOf(found) : null, left: found.scroller.scrollLeft, top: found.scroller.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
+        if (found.type === 'pagelist') found.frozen = found.pages();
         for (const number of job.config.pages) {
           check(job); job.current = number;
           await notify(job, 'progress', { number, phase: 'loading' });
@@ -383,6 +435,9 @@
       let oldZoom = select?.value;
       if (oldZoom === 'custom') oldZoom = String(parseFloat(select.selectedOptions[0].textContent.replace(/[^\d.]/g, '')) / 100);
       original = { page: Number(found.doc.querySelector('#pageNumber')?.value) || 1, zoom: oldZoom, left: found.container.scrollLeft, top: found.container.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
+      // Already at the target zoom: step away first so the viewer redraws every page at full size (needed after
+      // the panel lifts the PDF.js 5+ screen-size canvas limit).
+      if (select && select.value === String(job.config.zoom)) { zoom(found, '1'); await sleep(250); }
       zoom(found, job.config.zoom);
       for (const number of job.config.pages) {
         check(job); job.current = number;
@@ -393,10 +448,11 @@
       }
     } catch (error) { failure = error.message; }
     finally {
-      if (found && original && location.href === job.config.sourceUrl) {
+      if (found && original && sameDocument(location.href, job.config.sourceUrl)) {
         try {
           // Pagers return to the original page; page lists have no zoom or page control, only a scroll position.
-          if (found.type === 'pager' && original.page) await goToPage(found, original.page, { ...job, cancelled: false, config: { ...job.config, timeoutMs: 10000 } });
+          // Restoring is capped at 15 seconds so a stopped capture always finishes promptly.
+          if (found.type === 'pager' && original.page) await goToPage(found, original.page, { cancelled: false, abortAt: performance.now() + 15000, config: { ...job.config, timeoutMs: 5000 } });
           if (found.type === 'pdfjs') {
             if (original.zoom) zoom(found, original.zoom);
             navigate(found, original.page);
@@ -442,7 +498,7 @@
       if (running) throw new Error('A capture is already running in this tab.');
       const info = inspect();
       if (!Array.isArray(config.pages) || !config.pages.length || config.pages.length > 200 || config.pages.some((n) => !Number.isInteger(n) || n < 1 || n > info.total)) throw new Error('Invalid document page range.');
-      if (![2, 3].includes(config.zoom) || config.sourceUrl !== location.href) throw new Error('Capture settings do not match this document.');
+      if (![2, 3].includes(config.zoom) || !sameDocument(config.sourceUrl, location.href)) throw new Error('Capture settings do not match this document.');
       running = { config, current: null, cancelled: false };
       void run(running);
       return { started: true };

@@ -319,3 +319,66 @@ test('passes require the exact order amount and are issued by order.paid when th
   await post('api/razorpay/webhook', null, { raw: foreign, headers: { 'X-Razorpay-Signature': hmac(config.webhookSecret, foreign), 'X-Razorpay-Event-Id': 'evt_order_2' } });
   assert.equal((await license('validate', { license_key: 'PP-AAAAA-AAAAA-AAAAA-AAAAA' })).status, 404);
 });
+
+test('review fixes: malformed request lines get 400 and the server keeps running', async () => {
+  const net = require('node:net');
+  const reply = await new Promise((resolve, reject) => {
+    const socket = net.connect(server.address().port, '127.0.0.1', () => socket.write('GET http://[ HTTP/1.1\r\nHost: x\r\n\r\n'));
+    let data = ''; socket.on('data', (d) => { data += d; }); socket.on('end', () => resolve(data)); socket.on('error', reject);
+    setTimeout(() => { socket.destroy(); resolve(data); }, 1000);
+  });
+  assert.match(reply, /^HTTP\/1\.1 400/);
+  assert.equal((await fetch(base + 'healthz')).status, 200);
+});
+
+test('review fixes: behind a proxy, the right-most forwarded address is rate limited, not a spoofed first entry', async () => {
+  const proxiedDb = openDatabase(':memory:');
+  const proxied = http.createServer(createApp({ config: { ...config, trustProxy: true, rateLimits: { license: 2, checkout: 1, manage: 1 } }, db: proxiedDb, razorpay: fake, now: () => clock }));
+  await new Promise((resolve) => proxied.listen(0, '127.0.0.1', resolve));
+  try {
+    const statuses = [];
+    for (let i = 0; i < 4; i++) {
+      const r = await fetch(`http://127.0.0.1:${proxied.address().port}/v1/licenses/validate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${i}, 203.0.113.7` }, body: JSON.stringify({ license_key: 'PP-AAAAA-AAAAA-AAAAA-AAAAA' }) });
+      statuses.push(r.status);
+    }
+    assert.deepEqual(statuses, [404, 404, 429, 429]);
+  } finally { proxied.close(); proxiedDb.close(); }
+});
+
+test('review fixes: a pass bought before a price change still issues at the price it was ordered for', async () => {
+  const start = (await post('api/checkout', { email: 'pricechange@example.com', currency: 'INR', plan: 'week' })).data;
+  const original = config.passes.week.amounts.INR;
+  config.passes.week.amounts.INR = 29900;
+  try {
+    const claimed = await post('api/checkout/claim', { purchase_id: start.order_id, claim_token: start.claim_token, ...payOrder(start.order_id) });
+    assert.equal(claimed.status, 200, JSON.stringify(claimed.data));
+    assert.equal(fake.orders.get(start.order_id).amount, original);
+  } finally { config.passes.week.amounts.INR = original; }
+});
+
+test('review fixes: an authenticated-only subscription gets a short provisional license that resyncs to the paid period', async () => {
+  const start = (await post('api/checkout', { email: 'mandate@example.com', currency: 'INR' })).data;
+  const paid = pay(start.subscription_id);
+  Object.assign(fake.subscriptions.get(start.subscription_id), { status: 'authenticated', current_end: null });
+  const claimed = await post('api/checkout/claim', { subscription_id: start.subscription_id, claim_token: start.claim_token, ...paid });
+  assert.equal(claimed.data.expires_at, new Date((clock + 2 * DAY) * 1000).toISOString(), 'Provisional, not a full year');
+  clock += 3 * DAY;
+  Object.assign(fake.subscriptions.get(start.subscription_id), { status: 'active', current_end: clock + 365 * DAY });
+  const valid = await license('validate', { license_key: claimed.data.license_key });
+  assert.equal(valid.data.valid, true);
+  assert.equal(valid.data.license_key.expires_at, new Date((clock + 365 * DAY) * 1000).toISOString());
+});
+
+test('review fixes: a late out-of-order "halted" webhook cannot expire a recovered subscription', async () => {
+  const { key, subscription_id: sub } = await buy('ordering@example.com');
+  // Razorpay now reports the subscription active; a stale halted event arrives afterwards.
+  await webhook('subscription.halted', { ...fake.subscriptions.get(sub), status: 'halted' }, 'evt_stale_halt');
+  assert.equal((await license('validate', { license_key: key })).data.valid, true);
+  // If the API is unreachable the event's copy is used, and the next check after an hour heals it.
+  fake.failGet = true;
+  await webhook('subscription.halted', { ...fake.subscriptions.get(sub), status: 'halted' }, 'evt_stale_halt_2');
+  fake.failGet = false;
+  assert.equal((await license('validate', { license_key: key })).data.valid, false);
+  clock += 2 * 3600;
+  assert.equal((await license('validate', { license_key: key })).data.valid, true, 'Re-checked against Razorpay and restored');
+});

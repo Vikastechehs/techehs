@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.7.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.8.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -63,6 +63,39 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 ## Delivery expectations
 
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
+
+## Changes in 0.8.0: real PDF.js releases and independent review fixes
+
+**Tested against Mozilla's official PDF.js viewer app** (`tests/pdfjs-apps.test.cjs`, releases 2.16.105, 3.11.174, 4.10.38, 5.4.296, 6.4.299, unmodified). This found a critical issue: PDF.js 5 and later cap each page canvas at about three screens of pixels (`capCanvasAreaFactor`, from `screen.availWidth x availHeight`). On a typical laptop, every A4 page at 200% was drawn at reduced size, so capture failed on all recent PDF.js sites.
+- During a capture, the panel now makes the page's own (main) world report a very large screen, and restores it afterwards.
+- If the viewer is already at the target zoom, the capture steps away first so the viewer redraws.
+- All five releases now pass. The extension captured all 7 pages at 300% on 2.16 and 6.4, with the viewer's page and zoom restored. The exported PDFs were checked independently.
+
+**Fixes from an independent code review:**
+- **Server:**
+  - A malformed request line crashed the process; it now gets 400, and server.js catches handler errors.
+  - Behind a proxy, rate limiting used the spoofable first X-Forwarded-For entry; it now uses the right-most one. Expired rate-limit entries are evicted instead of clearing every counter.
+  - Passes are checked against the amount and days stored with the order, so a price change cannot strand paid orders.
+  - Yearly licenses get a 2-day provisional period until Razorpay reports a paid period.
+  - Subscription webhooks act on the subscription re-read from the API, because delivery order is not guaranteed. Expired yearly licenses are also re-checked hourly, so they heal.
+- **Single-page viewers:**
+  - Hindi labels now match; Devanagari vowel signs were being stripped.
+  - A page box or drop-down is only trusted when the picture also changes; otherwise the viewer steps with Next/Previous.
+  - Every step waits for the new picture.
+  - An unchanged picture is saved with a "looks identical" warning, never silently.
+  - The counter nearest the viewer's buttons is used. Carousels and banner sliders (and their "1 / 5" counters) are ignored. »/« are no longer treated as Next/Previous, and date-like text is not read as a page count.
+  - A viewer opened on its last page (Next disabled) is detected.
+  - ASP.NET `__doPostBack` links and submit buttons are treated as page-reloading controls.
+  - Restoring is capped at 15 s.
+  - `#fragment` changes no longer abort a capture.
+- **Image lists:**
+  - The page list is frozen when a capture starts.
+  - Native `loading="lazy"` and still-downloading images are counted as pages.
+  - Small images that finish loading are saved with a warning instead of timing out.
+- **Panel:**
+  - A page reload or closed tab during capture now fails the run with an explanation instead of leaving it stuck. It is confirmed by checking that the capture engine is gone, because viewers update `#page=N` while paging.
+  - Submitting a license while the plan is still loading shows a message.
+- **New regression tests** for each fix: server tests, checker fixtures (Hindi, an ignored page box, carousel decoy, last-page start, postback, native lazy) and mutation checks.
 
 ## Changes in 0.7.0: single-page (Next/Previous) viewers
 

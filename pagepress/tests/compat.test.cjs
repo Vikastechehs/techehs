@@ -25,7 +25,9 @@ async function main() {
   process.argv = [argv[0], 'compat-check', '--out', out, '--wait', '1500', '--trial', '3',
     `${origin}/image-viewer?pages=6`, `${origin}/viewer?pages=4&delay=100`, `${origin}/canvas-viewer`, `${origin}/image-viewer?pages=3&cross=1`,
     `${origin}/image-viewer?pages=3&small=1`, `${origin}/pdf-embed`, `${origin}/framed-cross-origin`, `${origin}/plain`,
-    ...['text', 'input', 'select', 'canvas', 'reload'].map((mode) => `${origin}/pager-viewer?mode=${mode}`)];
+    ...['text', 'input', 'select', 'canvas', 'reload'].map((mode) => `${origin}/pager-viewer?mode=${mode}`),
+    `${origin}/pager-viewer?mode=hindi`, `${origin}/pager-viewer?mode=deaf`, `${origin}/pager-viewer?mode=text&decoy=1`, `${origin}/pager-viewer?mode=text&start=5`,
+    `${origin}/pager-viewer?mode=postback`, `${origin}/image-viewer?pages=8&native=1`];
   let reports;
   try { reports = await require('../tools/compat-check.cjs').main(); } finally { process.argv = argv; server.close(); }
   const by = (fragment) => reports.find((r) => r.url.includes(fragment));
@@ -72,7 +74,18 @@ async function main() {
   assert.deepEqual(canvasPager.trial.pages.map((p) => p.width), [1310, 1320, 1330]);
   const reload = by('mode=reload');
   assert.equal(reload.verdict, 'unsupported'); assert.match(reload.notes.join(' '), /loads a new web page/);
-  assert.match(fs.readFileSync(path.join(out, 'report.md'), 'utf8'), /supported: 7, partial: 1, unsupported: 5/);
+  // Review fixes: Hindi labels, a page box the viewer ignores, a carousel decoy, opened on the last page (Next
+  // disabled), ASP.NET postback links, and native loading="lazy" page lists.
+  const expectPages = (r, label) => { assert.equal(r.verdict, 'supported', `${label}: ${JSON.stringify(r)}`); assert.equal(r.trial.error, null, `${label}: ${r.trial.error}`);
+    assert.deepEqual(r.trial.pages.map((p) => [p.number, p.width, p.height]), [[1, 1250, 1754], [2, 1260, 1754], [3, 1754, 1270]], `${label}: right page under each number`); assert.ok(r.trial.pages.every((p) => !p.warning), label); };
+  expectPages(by('mode=hindi'), 'Hindi buttons');
+  expectPages(by('mode=deaf'), 'ignored page box');
+  const decoy = by('decoy=1'); expectPages(decoy, 'carousel decoy'); assert.equal(decoy.pages, 5, 'The viewer counter, not the "1 / 3" banner');
+  expectPages(by('start=5'), 'opened on the last page');
+  const postback = by('mode=postback'); assert.equal(postback.verdict, 'unsupported'); assert.match(postback.notes.join(' '), /loads a new web page/);
+  const native = by('native=1'); assert.equal(native.verdict, 'supported', JSON.stringify(native)); assert.equal(native.pages, 8, 'Unloaded loading="lazy" pages are counted');
+  assert.deepEqual(native.trial.pages.map((p) => [p.width, p.height]), [[1240, 1754], [1240, 1754], [1754, 1240]]);
+  assert.match(fs.readFileSync(path.join(out, 'report.md'), 'utf8'), /supported: 12, partial: 1, unsupported: 6/);
   console.log('PASS: compatibility checker classifies image, PDF.js and canvas viewers, cross-origin images and frames, low-resolution sources, built-in PDF and plain pages, and single-image pagers (text counter, page box, drop-down, canvas; full-reload pagers refused); trial captures keep native pixels and page order.');
 }
 main().catch((error) => { console.error(error); process.exit(1); });

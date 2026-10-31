@@ -21,7 +21,12 @@ function rateLimiter(limit, windowMs = 60000) {
   const hits = new Map();
   return (key, t = Date.now()) => {
     const entry = hits.get(key);
-    if (!entry || t - entry.start >= windowMs) { hits.set(key, { start: t, count: 1 }); if (hits.size > 50000) hits.clear(); return true; }
+    if (!entry || t - entry.start >= windowMs) {
+      // Drop expired entries now and then; never reset live counters.
+      if (hits.size > 10000) for (const [k, v] of hits) if (t - v.start >= windowMs) hits.delete(k);
+      hits.set(key, { start: t, count: 1 });
+      return true;
+    }
     return ++entry.count <= limit;
   };
 }
@@ -32,7 +37,7 @@ function createApp({ config, db, razorpay, now }) {
   const limits = { license: rateLimiter(perMinute.license), checkout: rateLimiter(perMinute.checkout), manage: rateLimiter(perMinute.manage) };
   const q = {
     checkout: db.prepare('SELECT * FROM checkouts WHERE purchase_id = ?'),
-    addCheckout: db.prepare('INSERT INTO checkouts (purchase_id, plan, email, currency, claim_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    addCheckout: db.prepare('INSERT INTO checkouts (purchase_id, plan, email, currency, claim_hash, amount, days, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'),
     reject: db.prepare('UPDATE checkouts SET rejected = 1 WHERE purchase_id = ?'),
     seenEvent: db.prepare('SELECT 1 FROM webhook_events WHERE id = ?'),
     recordEvent: db.prepare('INSERT OR IGNORE INTO webhook_events (id, received_at) VALUES (?, ?)')
@@ -66,7 +71,9 @@ function createApp({ config, db, razorpay, now }) {
     if (type.includes('application/json')) { try { const v = JSON.parse(raw || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } }
     return Object.fromEntries(new URLSearchParams(raw));
   }
-  const clientIp = (req) => (config.trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
+  // Behind a trusted reverse proxy the client is the last address it appended; earlier entries come from the client
+  // and can be forged.
+  const clientIp = (req) => (config.trustProxy && String(req.headers['x-forwarded-for'] || '').split(',').map((v) => v.trim()).filter(Boolean).pop()) || req.socket.remoteAddress || 'unknown';
 
   const PASS_NAMES = { week: '1 week', month: '1 month' };
   // What a plan costs in a currency: the yearly Razorpay subscription plan, or a one-time pass amount.
@@ -92,7 +99,7 @@ function createApp({ config, db, razorpay, now }) {
       ? await razorpay.createSubscription({ plan_id: o.id, total_count: config.totalCount, quantity: 1, customer_notify: 1, notify_info: { notify_email: email }, notes })
       : await razorpay.createOrder({ amount: o.amount, currency, receipt: 'pp_' + crypto.randomBytes(9).toString('hex'), notes });
     const claim = crypto.randomBytes(32).toString('base64url');
-    q.addCheckout.run(purchase.id, planName, email, currency, sha256(claim), Math.floor(Date.now() / 1000));
+    q.addCheckout.run(purchase.id, planName, email, currency, sha256(claim), o.recurring ? null : o.amount, o.recurring ? null : o.days, Math.floor(Date.now() / 1000));
     return [200, { key_id: config.keyId, [o.recurring ? 'subscription_id' : 'order_id']: purchase.id, purchase_id: purchase.id, plan: planName, claim_token: claim, email,
       name: config.sellerName, description: o.recurring ? `PagePress Pro · ${o.name}` : o.name, currency: o.currency, amount: o.amount }];
   }
@@ -111,12 +118,12 @@ function createApp({ config, db, razorpay, now }) {
   }
   // A pass is issued only for a payment of the exact order amount; an authorized payment is captured first.
   async function issuePassFor(checkout, payment) {
-    const o = await offer(checkout.currency, checkout.plan);
-    if (!o || payment.order_id !== checkout.purchase_id || payment.amount !== o.amount || payment.currency !== checkout.currency) return null;
+    // Compare with what this order was created for, so a later price change cannot strand a paid order.
+    if (!checkout.amount || payment.order_id !== checkout.purchase_id || payment.amount !== checkout.amount || payment.currency !== checkout.currency) return null;
     if (payment.status === 'authorized') payment = { ...payment, ...await razorpay.capturePayment(payment.id, payment.amount, payment.currency) };
     if (payment.status !== 'captured') return null;
     if (!await regionAllowed(checkout, checkout.currency, payment)) return false;
-    return licenses.issuePass({ orderId: checkout.purchase_id, plan: checkout.plan, days: o.days, email: checkout.email, currency: checkout.currency });
+    return licenses.issuePass({ orderId: checkout.purchase_id, plan: checkout.plan, days: checkout.days, email: checkout.email, currency: checkout.currency });
   }
   // Return the license for a checkout this browser started. A valid payment signature issues it immediately;
   // without one (for example after closing the tab) the license appears once Razorpay's webhook arrives.
@@ -155,9 +162,12 @@ function createApp({ config, db, razorpay, now }) {
       const checkout = q.checkout.get(String(event.payload.order?.entity?.id || ''));
       if (checkout && checkout.plan !== 'year' && !checkout.rejected && payment && !licenses.byPurchase(checkout.purchase_id)) await issuePassFor(checkout, payment);
     } else {
-      const subscription = event?.payload?.subscription?.entity;
-      if (!String(event?.event || '').startsWith('subscription.') || !subscription?.id) return [200, { ok: true, ignored: true }];
-      if (subscription.notes?.product && subscription.notes.product !== 'pagepress-pro') return [200, { ok: true, ignored: true }];
+      const snapshot = event?.payload?.subscription?.entity;
+      if (!String(event?.event || '').startsWith('subscription.') || !snapshot?.id) return [200, { ok: true, ignored: true }];
+      if (snapshot.notes?.product && snapshot.notes.product !== 'pagepress-pro') return [200, { ok: true, ignored: true }];
+      // Razorpay does not guarantee delivery order, so a late "halted" must not override a recovery: use the
+      // subscription's current state from the API, falling back to the event's copy if the API is unreachable.
+      const subscription = await razorpay.getSubscription(snapshot.id).catch(() => snapshot);
       if (!licenses.byPurchase(subscription.id) && ['subscription.activated', 'subscription.charged'].includes(event.event)) {
         const checkout = q.checkout.get(subscription.id);
         const email = checkout?.email || subscription.notes?.email;
@@ -173,7 +183,8 @@ function createApp({ config, db, razorpay, now }) {
   }
 
   return async function handle(req, res) {
-    const url = new URL(req.url, 'http://local');
+    let url;
+    try { url = new URL(req.url, 'http://local'); } catch { return send(res, 400, { error: 'Bad request.' }); }
     const ip = clientIp(req);
     try {
       if (req.method === 'GET' && STATIC[url.pathname]) {
@@ -215,6 +226,7 @@ function createApp({ config, db, razorpay, now }) {
     } catch (error) {
       if (error.status === 413) return send(res, 413, { error: error.message });
       console.error(new Date().toISOString(), req.method, url.pathname, error.message);
+      if (res.headersSent) { res.destroy(); return; }
       return send(res, 502, { error: 'The payment service is temporarily unavailable. Please try again.' });
     }
   };

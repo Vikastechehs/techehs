@@ -2,7 +2,9 @@ const crypto = require('node:crypto');
 
 const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const RESYNC_SECONDS = 3600;
-const PROVISIONAL_SECONDS = 366 * 86400;
+// Until Razorpay reports a paid period (active with current_end), a yearly license is provisional and re-checked
+// against the subscription once this short period ends.
+const PROVISIONAL_SECONDS = 2 * 86400;
 
 // PP- plus four groups of five base32 characters: 100 random bits, and recognisable to the extension.
 function newKey() {
@@ -64,7 +66,8 @@ function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now(
     const existing = q.byPurchase.get(subscription.id);
     if (existing) return existing;
     if (licenseStatus(subscription) !== 'active') return null;
-    return insert(subscription.id, 'year', email, currency, subscription.current_end || now() + PROVISIONAL_SECONDS);
+    const paidUntil = subscription.status === 'active' && subscription.current_end ? subscription.current_end : now() + PROVISIONAL_SECONDS;
+    return insert(subscription.id, 'year', email, currency, paidUntil);
   }
   // A one-time pass (1 week or 1 month) runs from payment and never renews.
   function issuePass({ orderId, plan, days, email, currency }) {
@@ -81,7 +84,8 @@ function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now(
   // A missed renewal webhook must not cut off a paying customer: re-read the subscription at most hourly.
   async function current(key) {
     let license = q.license.get(key);
-    if (license && license.plan === 'year' && effectiveStatus(license) === 'expired' && license.status === 'active' && now() - license.synced_at > RESYNC_SECONDS) {
+    // Also re-check yearly licenses a webhook marked expired, so a mistaken or out-of-order event heals itself.
+    if (license && license.plan === 'year' && license.status !== 'disabled' && effectiveStatus(license) === 'expired' && now() - license.synced_at > RESYNC_SECONDS) {
       try { sync(await razorpay.getSubscription(license.purchase_id)); } catch { /* Keep the stored state when Razorpay is unreachable. */ }
       license = q.license.get(key);
     }

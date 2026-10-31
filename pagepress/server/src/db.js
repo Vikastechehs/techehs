@@ -14,6 +14,8 @@ function openDatabase(file) {
       email TEXT NOT NULL,
       currency TEXT NOT NULL,
       claim_hash TEXT NOT NULL,
+      amount INTEGER,
+      days INTEGER,
       rejected INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
     );

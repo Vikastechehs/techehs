@@ -55,27 +55,35 @@ function handle(req, res, otherOrigin) {
     // normal settle time, so waiting for a stable picture alone would not catch it either.
     const total = Number(url.searchParams.get('pages') || 5), mode = url.searchParams.get('mode') || 'text';
     const start = Number(url.searchParams.get('page') || url.searchParams.get('start') || 2);
-    const counter = mode === 'input' ? `<input id="pg" value="${start}" size="3"> <span>/ ${total}</span>`
+    // Extra modes: deaf = a page box the viewer ignores (only Next/Previous work); hindi = आगे/पीछे buttons;
+    // postback = ASP.NET __doPostBack links; decoy=1 adds an auto-rotating banner carousel with its own Next and "1 / 3".
+    const hindi = mode === 'hindi', decoy = url.searchParams.has('decoy');
+    const counter = mode === 'input' || mode === 'deaf' ? `<input id="pg" value="${start}" size="3"> <span>/ ${total}</span>`
       : mode === 'select' ? `<select id="pg">${Array.from({ length: total }, (_, i) => `<option${i + 1 === start ? ' selected' : ''}>${i + 1}</option>`).join('')}</select>`
         : `<span id="count">Page ${start} of ${total}</span>`;
     const controls = mode === 'reload'
       ? `<a id="prev" href="?mode=reload&page=${start - 1}">‹ Prev</a> ${counter} <a id="next" href="?mode=reload&page=${start + 1}">Next ›</a>`
-      : `<button id="prev" type="button">‹ Prev</button> ${counter} <button id="next" type="button">Next ›</button>`;
+      : mode === 'postback' ? `<form><a id="prev" href="javascript:__doPostBack('prev','')">‹ Prev</a> ${counter} <a id="next" href="javascript:__doPostBack('next','')">Next ›</a></form>`
+        : `<button id="prev" type="button" class="${hindi ? 'b1' : ''}">${hindi ? 'पीछे' : '‹ Prev'}</button> ${counter} <button id="next" type="button" class="${hindi ? 'b2' : ''}">${hindi ? 'आगे' : 'Next ›'}</button>`;
+    const banner = decoy ? `<div class="carousel" style="background:#fff;padding:6px"><img class="slide" src="/page-image/9.png?tagged=1" style="width:300px;height:200px;object-fit:cover"><button class="carousel-control-next" type="button">Next</button> <span id="slide">1 / 3</span></div>` : '';
     const stage = mode === 'canvas' ? '<canvas id="page" width="1300" height="1840"></canvas>' : '<img id="page" alt="Document page">';
-    return send('text/html', html('Single page viewer', `<div class="toolbar" style="color:#fff;padding:8px">${controls}</div><div class="sheet" style="width:600px">${stage}</div>`, `
+    return send('text/html', html('Single page viewer', `${banner}<div class="toolbar" style="color:#fff;padding:8px">${controls}</div><div class="sheet" style="width:600px">${stage}</div>`, `
       const total = ${total}, mode = '${mode}'; let current = ${start}, token = 0;
       const page = document.getElementById('page'), pg = document.getElementById('pg'), count = document.getElementById('count');
       function draw(n) {
         if (mode === 'canvas') { page.width = 1300 + n * 10; const x = page.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, page.width, page.height); x.font = '80px Arial'; x.fillStyle = '#111'; x.fillText('CANVAS PAGE ' + n, 80, 300); }
         else page.src = '/page-image/' + n + '.png?tagged=1' + (n === 3 ? '&landscape=1' : '');
       }
+      // Next/Previous are disabled at the ends, as most viewers do.
+      function buttons() { const next = document.getElementById('next'), prev = document.getElementById('prev'); if (next.tagName === 'BUTTON') { next.disabled = current === total; prev.disabled = current === 1; } }
       function go(n) {
-        n = Math.max(1, Math.min(total, n)); current = n;
+        n = Math.max(1, Math.min(total, n)); current = n; buttons();
         if (count) count.textContent = 'Page ' + n + ' of ' + total; if (pg) pg.value = String(n);
         const t = ++token; setTimeout(() => { if (t === token) draw(n); }, 1500);
       }
-      draw(current);
-      if (mode !== 'reload') { document.getElementById('next').onclick = () => go(current + 1); document.getElementById('prev').onclick = () => go(current - 1); }
+      draw(current); buttons();
+      if (${decoy}) { let s = 1; setInterval(() => { s = s % 3 + 1; document.getElementById('slide').textContent = s + ' / 3'; }, 700); }
+      if (mode !== 'reload' && mode !== 'postback') { document.getElementById('next').onclick = () => go(current + 1); document.getElementById('prev').onclick = () => go(current - 1); }
       if (mode === 'input') pg.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(Number(pg.value)); });
       if (mode === 'select') pg.addEventListener('change', () => go(Number(pg.value)));`));
   }
@@ -85,6 +93,7 @@ function handle(req, res, otherOrigin) {
     const base = url.searchParams.has('cross') ? otherOrigin : '';
     const sheets = Array.from({ length: total }, (_, i) => {
       const n = i + 1, landscape = n === 3 && !small, src = `${base}/page-image/${n}.png${landscape ? '?landscape=1' : small}`;
+      if (url.searchParams.has('native')) return `<div class="sheet${landscape ? ' landscape' : ''}"><img loading="lazy" src="${src}" width="${landscape ? 1754 : 1240}" height="${landscape ? 1240 : 1754}" alt="Page ${n}"></div>`;
       return `<div class="sheet${landscape ? ' landscape' : ''}">${n <= 2 ? `<img src="${src}" alt="Page ${n}">` : `<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="${src}" alt="Page ${n}" style="min-height:400px">`}</div>`;
     }).join('');
     return send('text/html', html('Image page viewer', sheets, `

@@ -55,10 +55,16 @@ async function trialCapture(page, count, timeoutMs) {
       return { ok: true };
     };
     const numbers = Array.from({ length: Math.min(count, info.total) }, (_, i) => i + 1);
+    // Same as the extension panel: lift the PDF.js 5+ screen-size canvas limit for the capture, then restore it.
+    const windows = [];
+    (function walk(win, depth) { windows.push(win); if (depth < 2) for (let i = 0; i < win.frames.length; i++) { try { void win.frames[i].document; walk(win.frames[i], depth + 1); } catch { /* cross-origin */ } } })(window, 0);
+    const limit = (lift) => { for (const win of windows) for (const name of ['availWidth', 'availHeight']) { if (lift) Object.defineProperty(win.screen, name, { get: () => 32768, configurable: true }); else delete win.screen[name]; } };
+    limit(true);
     PagePressCapture.start({ id: 'compat-' + Date.now(), pages: numbers, zoom: 2, settleMs: 800, timeoutMs, sourceUrl: location.href });
     const started = Date.now();
     while (!finished && Date.now() - started < timeoutMs * (numbers.length + 1)) await new Promise((r) => setTimeout(r, 200));
     delete globalThis.PagePressTransport;
+    limit(false);
     return { pages, error: finished ? finished.error : 'Timed out waiting for the trial capture.' };
   }, { count, timeoutMs });
 }

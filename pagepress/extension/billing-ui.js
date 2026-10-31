@@ -84,7 +84,8 @@
   });
   $('license-form').addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (pending || captureBusy || !status.configured) return;
+    if (pending) { $('billing-status').textContent = 'Still checking your license. Try again in a moment.'; return; }
+    if (captureBusy || !status.configured) return;
     try {
       const key = $('license-key').value;
       const origin = licensing?.permissionFor({ key });

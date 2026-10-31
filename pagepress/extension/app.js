@@ -94,6 +94,23 @@
     } catch (error) { source = null; notice(error.message, true); if (!job) setState('Not connected'); }
     finally { detecting = false; controls(); }
   }
+  // PDF.js 5 and later cap each page canvas at about three screens of pixels (capCanvasAreaFactor, measured from
+  // screen.availWidth x availHeight) and draw only the visible part sharply, so at 200%/300% a whole page would
+  // render blurred on a laptop screen. During a capture the page's own world reports a very large screen; the real
+  // values return when the capture ends. Older PDF.js versions and other viewers do not read these values.
+  async function canvasLimit(tabId, lift) {
+    await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', args: [lift], func: (lift) => {
+      const windows = [];
+      (function walk(win, depth) {
+        windows.push(win);
+        if (depth < 2) for (let i = 0; i < win.frames.length; i++) { try { void win.frames[i].document; walk(win.frames[i], depth + 1); } catch { /* cross-origin frame */ } }
+      })(window, 0);
+      for (const win of windows) for (const name of ['availWidth', 'availHeight']) {
+        if (lift) Object.defineProperty(win.screen, name, { get: () => 32768, configurable: true });
+        else delete win.screen[name];
+      }
+    } }).catch(() => { /* The tab may have closed; nothing to restore then. */ });
+  }
   async function launchCapture(resume = false) {
     if (busy || authorizing || download || !enabled) return;
     authorizing = true; controls();
@@ -104,7 +121,7 @@
       const tab = resume ? await chrome.tabs.get(job.tabId) : await target();
       const inspected = await inspectTab(tab.id);
       if (inspected.running) throw new Error('A capture is already running. Wait for it to finish or stop it first.');
-      if (resume && (inspected.info.url !== job.sourceUrl || inspected.info.total !== job.total)) throw new Error('The original document has changed. Start a new capture.');
+      if (resume && (inspected.info.url.split('#')[0] !== job.sourceUrl.split('#')[0] || inspected.info.total !== job.total)) throw new Error('The original document has changed. Start a new capture.');
       let config;
       if (!resume) {
         config = core.validate({ from: $('from').value, to: $('to').value, zoom: $('quality').value, format: $('format').value, settleMs: $('timing').value, timeoutMs: 30000 }, inspected.info.total);
@@ -119,6 +136,7 @@
       source = inspected.info; sourceTabId = tab.id; showSource(source);
       busy = true; setState('capturing'); renderPages(); notice('');
       const missing = core.missingPages(job, pages);
+      await canvasLimit(tab.id, true);
       const [started] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: (config) => {
         try { return globalThis.PagePressCapture.start(config); }
         catch (error) { return { error: error.message }; }
@@ -126,7 +144,7 @@
       if (!started?.result?.started) throw new Error(started?.result?.error || 'The source tab could not start capture.');
     } catch (error) {
       busy = false;
-      if (job) { job.status = 'failed'; job.error = error.message; await store.saveJob(job).catch(() => {}); }
+      if (job) { job.status = 'failed'; job.error = error.message; await store.saveJob(job).catch(() => {}); void canvasLimit(job.tabId, false); }
       notice(error.message, true); setState('failed'); controls();
     } finally { authorizing = false; controls(); }
   }
@@ -167,7 +185,7 @@
       return;
     }
     if (message.type === 'finished') {
-      busy = false; incoming = null;
+      busy = false; incoming = null; void canvasLimit(job.tabId, false);
       const missing = core.missingPages(job, pages);
       job.status = message.cancelled ? 'cancelled' : message.error || missing.length ? 'failed' : 'captured';
       job.error = message.error || (missing.length ? 'The capture did not include every requested page.' : '');
@@ -270,6 +288,26 @@
   $('format').addEventListener('change', syncFormat);
   $('page-list').addEventListener('click', (event) => { const button = event.target.closest('[data-jpeg]'); if (button) void saveOutput(Number(button.dataset.jpeg)); });
   for (const id of ['from', 'to']) $(id).addEventListener('input', controls);
+  // A page reload or a closed tab ends the content script without a "finished" message: fail the run instead of
+  // leaving the panel stuck in Capturing. Saved pages are kept for Retry missing pages.
+  async function sourceLost(tabId, reason, confirm = false) {
+    if (!busy || job?.status !== 'capturing' || tabId !== job.tabId) return;
+    // Viewers update the address (#page=3) while paging, which Chrome also reports as loading. Only a page whose
+    // capture engine is gone has really reloaded.
+    if (confirm) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const id = job.id;
+      const [alive] = await chrome.scripting.executeScript({ target: { tabId }, func: (id) => globalThis.PagePressCapture?.status()?.id === id, args: [id] }).catch(() => [null]);
+      if (alive?.result || !busy || job?.id !== id || job.status !== 'capturing') return;
+    }
+    busy = false; incoming = null;
+    job.status = 'failed'; job.error = reason; await store.saveJob(job).catch(() => {});
+    setState('failed'); renderPages(); notice(reason, true); log(reason);
+  }
+  if (enabled) {
+    chrome.tabs.onUpdated.addListener((tabId, change) => { if (change.status === 'loading') void sourceLost(tabId, 'The document page reloaded or navigated during capture. Saved pages are kept; reopen the document and choose Retry missing pages.', true); });
+    chrome.tabs.onRemoved.addListener((tabId) => void sourceLost(tabId, 'The document tab was closed during capture. Saved pages are kept; reopen the document and choose Retry missing pages.'));
+  }
   $('stop').addEventListener('click', async () => {
     try { await chrome.tabs.sendMessage(job.tabId, { channel: CHANNEL, type: 'cancel', jobId: job.id }); $('progress-detail').textContent = 'Stopping and restoring the document view...'; }
     catch (error) { busy = false; job.status = 'cancelled'; await store.saveJob(job); setState('cancelled'); notice(error.message, true); controls(); }
