@@ -24,7 +24,8 @@ async function main() {
   const argv = process.argv;
   process.argv = [argv[0], 'compat-check', '--out', out, '--wait', '1500', '--trial', '3',
     `${origin}/image-viewer?pages=6`, `${origin}/viewer?pages=4&delay=100`, `${origin}/canvas-viewer`, `${origin}/image-viewer?pages=3&cross=1`,
-    `${origin}/image-viewer?pages=3&small=1`, `${origin}/pdf-embed`, `${origin}/framed-cross-origin`, `${origin}/plain`];
+    `${origin}/image-viewer?pages=3&small=1`, `${origin}/pdf-embed`, `${origin}/framed-cross-origin`, `${origin}/plain`,
+    ...['text', 'input', 'select', 'canvas', 'reload'].map((mode) => `${origin}/pager-viewer?mode=${mode}`)];
   let reports;
   try { reports = await require('../tools/compat-check.cjs').main(); } finally { process.argv = argv; server.close(); }
   const by = (fragment) => reports.find((r) => r.url.includes(fragment));
@@ -59,7 +60,19 @@ async function main() {
   const framed = by('/framed-cross-origin');
   assert.equal(framed.verdict, 'unsupported'); assert.match(framed.notes.join(' '), /cross-origin frame.*localhost/);
   assert.equal(by('/plain').verdict, 'unsupported');
-  assert.match(fs.readFileSync(path.join(out, 'report.md'), 'utf8'), /supported: 3, partial: 1, unsupported: 4/);
-  console.log('PASS: compatibility checker classifies image, PDF.js and canvas viewers, cross-origin images and frames, low-resolution sources, built-in PDF and plain pages; trial captures keep native pixels.');
+  // Single-image pagers start on page 2, so the trial goes back to page 1 first; order is proven by tagged widths.
+  for (const mode of ['text', 'input', 'select']) {
+    const pager = by(`mode=${mode}`);
+    assert.equal(pager.verdict, 'supported', JSON.stringify(pager)); assert.equal(pager.viewer, 'Single-page image viewer'); assert.equal(pager.pages, 5);
+    assert.equal(pager.trial.error, null, pager.trial.error);
+    assert.deepEqual(pager.trial.pages.map((p) => [p.number, p.width, p.height]), [[1, 1250, 1754], [2, 1260, 1754], [3, 1754, 1270]], `${mode}: right page under each number`);
+  }
+  const canvasPager = by('mode=canvas');
+  assert.equal(canvasPager.viewer, 'Single-page canvas viewer');
+  assert.deepEqual(canvasPager.trial.pages.map((p) => p.width), [1310, 1320, 1330]);
+  const reload = by('mode=reload');
+  assert.equal(reload.verdict, 'unsupported'); assert.match(reload.notes.join(' '), /loads a new web page/);
+  assert.match(fs.readFileSync(path.join(out, 'report.md'), 'utf8'), /supported: 7, partial: 1, unsupported: 5/);
+  console.log('PASS: compatibility checker classifies image, PDF.js and canvas viewers, cross-origin images and frames, low-resolution sources, built-in PDF and plain pages, and single-image pagers (text counter, page box, drop-down, canvas; full-reload pagers refused); trial captures keep native pixels and page order.');
 }
 main().catch((error) => { console.error(error); process.exit(1); });

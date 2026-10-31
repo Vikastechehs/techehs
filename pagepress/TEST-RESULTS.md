@@ -1,4 +1,4 @@
-# PagePress 0.6.0 test results
+# PagePress 0.7.0 test results
 
 Run on 31 October 2026 in a Linux container (Node 22, headless Chromium via Playwright, isolated profile). Razorpay and Lemon Squeezy were replaced by fakes and mocks; no real checkout or payment was made.
 
@@ -9,9 +9,10 @@ Run on 31 October 2026 in a Linux container (Node 22, headless Chromium via Play
 | Browser: unconfigured build stays Free with purchases disabled; narrow layouts | `node tests/browser.test.cjs --unconfigured` | Pass |
 | Browser (New York time): week/month/year buttons in USD only, switch link shows the three INR plans; INR week opens `/buy?currency=INR&plan=week`, USD month and year open their Lemon Squeezy checkouts; INR opens the license server's `/buy?currency=INR`, USD opens Lemon Squeezy, neither unlocks Pro; Free 5-page gate, invalid key, Pro activation and persistence, billing portal, revocation, deactivation; full capture and export scenarios from 0.3.1; 390/320 px plan dialog | `node tests/browser.test.cjs` (also with `TZ=Asia/Kolkata`) | Pass |
 | Checkout and self-service pages in Chromium against the real server, Razorpay `checkout.js` stubbed to sign like Razorpay: yearly plan and 1-week pass bought (subscription vs one-time order), keys displayed and recovered, `/manage` shows the pass without renewal, refuses a wrong email, shows and cancels yearly renewal; 390 px layout | `npm --prefix server run test:pages` | Pass |
-| Compatibility checker on 8 fixture pages: image viewer with lazy pages and a header logo (supported, 6 pages, native 1240x1754, landscape page 1754x1240), PDF.js (supported), plain canvas viewer (supported), cross-origin images (unsupported, unreadable), 900 px source images (partial, saved without upscaling), built-in PDF embed, cross-origin frame and plain page (unsupported, with reasons) | `node tests/compat.test.cjs` | Pass |
+| Compatibility checker on 13 fixture pages: image viewer with lazy pages and a header logo (supported, 6 pages, native 1240x1754, landscape page 1754x1240), PDF.js (supported), plain canvas viewer (supported), cross-origin images (unsupported, unreadable), 900 px source images (partial, saved without upscaling), built-in PDF embed, cross-origin frame and plain page (unsupported, with reasons); single-page viewers with a text counter, page box, drop-down and canvas (supported, right page under each number even though each image arrives 1.5 s after the counter; disabling that guard makes the test fail), and a full-reload pager (unsupported) | `node tests/compat.test.cjs` | Pass |
+| Extension panel on a single-page viewer opened on page 2: pages 1-3 saved at 1250x1754 / 1260x1754 / 1754x1270 in order, viewer returned to page 2, PDF downloaded. Four consecutive full runs passed after making the capture-start step wait for either the replace prompt or the capture | part of `node tests/browser.test.cjs` | Pass |
 | Extension panel on an image page viewer (Free plan, 4 pages, lazy-loaded): label shows original resolution, quality disabled, pages saved at 1240x1754 / 1754x1240 with no warnings, PDF downloaded | part of `node tests/browser.test.cjs` | Pass |
-| Independent PDF/JPEG checks | `python3 tests/verify_pdfs.py`, `python3 tests/verify_jpegs.py` | Pass (now also the 4-page image-viewer PDF: embedded images 1,240 px wide) |
+| Independent PDF/JPEG checks | `python3 tests/verify_pdfs.py`, `python3 tests/verify_jpegs.py` | Pass (also the 4-page image-viewer PDF, 1,240 px images, and the 3-page single-page-viewer PDF, 1,250 px and wider) |
 
 ## Not verified here
 

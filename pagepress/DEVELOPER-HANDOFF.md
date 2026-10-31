@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.6.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.7.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -63,6 +63,13 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 ## Delivery expectations
 
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
+
+## Changes in 0.7.0: single-page (Next/Previous) viewers
+
+- `capture.js` adds a **pager adapter**. It finds the largest page image or canvas, Next/Previous controls (words in English and Hindi with arrows stripped, bare arrows, or next/prev ids and classes, nearest to the page), and a counter (a "N of M" or "N / M" text, a page-number box, or a numbered drop-down).
+- Navigation uses the page box or drop-down when present, otherwise steps with Next/Previous, and checks the counter after each step. Before saving, it waits until the image identity (source or pixels) differs from the previous page, because portals often update the counter before the new image arrives. Two identical pages in a row fall back after half the timeout. The viewer is returned to its starting page.
+- Pagers whose Next/Previous links load a new web page are refused with an explanation. Single-image pages without pager controls are still treated as one-page documents.
+- Tests: the checker test covers text-counter, page-box, drop-down, canvas and full-reload pagers. Its fixture delivers each image 1.5 s after the counter changes, and disabling the wait-for-new-image guard makes the test fail, so it really checks that. The extension browser test captures a pager end to end from page 2 and verifies it is restored to page 2.
 
 ## Changes in 0.6.0: compatibility checker and image viewers
 

@@ -9,10 +9,13 @@
 | **PDF.js-style viewers** | `.page[data-page-number]` canvases, `pageNumber`/`scaleSelect` controls | Re-rendered at 200% or 300% |
 | **Image page viewers** (new in 0.6) | A run of large, page-shaped `<img>` elements in document order: scanned sheets, including pages that load only when scrolled to | Each image's own original resolution |
 | **Canvas page viewers** (new in 0.6) | A run of large, page-shaped `<canvas>` elements without PDF.js markup | The canvas's own pixels |
+| **Single-page viewers** (new in 0.7) | One large page image or canvas, Next/Previous buttons ("Next ›", "« Prev", arrows, आगे/पीछे), and a visible counter ("Page 3 of 12", "3 / 12", a page-number box, or a page drop-down) | The image's own original resolution |
 
 Same-origin frames are searched too. Small images (logos, icons, thumbnails under 120 px on screen or 800 px of source) are ignored.
 
-Not supported, by design or browser rules: Chrome's built-in PDF viewer (use its download button), cross-origin frames (open the frame's address in its own tab), images or canvases from another website that the browser marks unreadable, protected or DRM viewers, and single-image viewers that swap one picture with Next/Previous buttons. That last type may be added later; the checker will show how common it is.
+Not supported, by design or browser rules: Chrome's built-in PDF viewer (use its download button), cross-origin frames (open the frame's address in its own tab), images or canvases from another website that the browser marks unreadable, protected or DRM viewers, single-page viewers with no visible page counter (PagePress cannot know how many pages there are), and single-page viewers whose Next button loads a whole new web page.
+
+For single-page viewers PagePress moves through pages with the viewer's own controls. It types into the page box or picks from the drop-down when there is one, and otherwise clicks Next or Previous. It waits until the new page's image has actually arrived, not just the counter, then returns the viewer to the page it started on.
 
 ## Running it
 

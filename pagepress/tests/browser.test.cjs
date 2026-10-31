@@ -117,12 +117,21 @@ async function main() {
       await source.goto(url); await source.locator('body').waitFor({ state: 'attached' });
       const pathname = new URL(url).pathname;
       if (pathname === '/image-viewer') await source.locator('.sheet img').first().waitFor({ timeout: 30000 });
+      else if (pathname === '/pager-viewer') await source.locator('#page').waitFor({ timeout: 30000 });
       else if (pathname !== '/unsupported') await source.locator('.page[data-loaded="true"]').waitFor({ timeout: 30000 });
       await ui.evaluate(async (url) => {
         const tabs = await chrome.tabs.query({}); const selected = tabs.find((t) => t.url === url);
         await chrome.storage.local.set({ pagepressTabId: selected.id });
       }, url);
       await ui.locator('#detect').click();
+    }
+    // Start a capture, confirming the replace prompt when it appears; fail with the panel's own message otherwise.
+    async function startCapture() {
+      await ui.locator('#capture').click();
+      await ui.waitForFunction(() => document.getElementById('confirm').open || document.getElementById('state').textContent === 'Capturing' || document.getElementById('notice').classList.contains('error'), null, { timeout: 30000 });
+      if (await ui.evaluate(() => document.getElementById('confirm').open)) await ui.locator('button[value="confirm"]').click();
+      await ui.waitForFunction(() => document.getElementById('state').textContent === 'Capturing' || document.getElementById('notice').classList.contains('error'), null, { timeout: 30000 });
+      assert.equal(await ui.locator('#state').textContent(), 'Capturing', await ui.locator('#notice').textContent());
     }
     async function retainDownload(name) {
       const item = await ui.evaluate(async () => (await chrome.downloads.search({ state: 'complete', orderBy: ['-startTime'], limit: 1 }))[0]);
@@ -331,14 +340,29 @@ async function main() {
     assert.equal(await ui.locator('#quality').isDisabled(), true);
     await ui.locator('#from').fill('1'); await ui.locator('#to').fill('4');
     await ui.locator('#filename').fill('pagepress-image-viewer.pdf');
-    await ui.locator('#capture').click(); if (!realOnly) await ui.locator('button[value="confirm"]').click();
-    await ui.waitForFunction(() => document.getElementById('state').textContent === 'Capturing', null, { timeout: 30000 });
+    await startCapture();
     await source.bringToFront();
     await ui.waitForFunction(() => ['Saved', 'Needs attention'].includes(document.getElementById('state').textContent), null, { timeout: 120000 });
     assert.equal(await ui.locator('#state').textContent(), 'Saved', await ui.locator('#notice').textContent());
     const imagePages = await ui.evaluate(async () => (await PagePressStore.getPages()).sort((a, b) => a.number - b.number).map((p) => [p.number, p.width, p.height, p.warning]));
     assert.deepEqual(imagePages, [[1, 1240, 1754, ''], [2, 1240, 1754, ''], [3, 1754, 1240, ''], [4, 1240, 1754, '']]);
     await retainDownload('pagepress-image-viewer.pdf');
+
+    // Single-image pager (Next/Previous, counter ahead of a slow image), opened on page 2: right page under each
+    // number, native size, and the viewer is returned to page 2 afterwards.
+    await selectSource(origin + '/pager-viewer?mode=text');
+    await ui.waitForFunction(() => document.getElementById('viewer-kind').textContent.startsWith('Single-page image viewer'), null, { timeout: 30000 });
+    assert.equal(await ui.locator('#total').textContent(), '5');
+    await ui.locator('#from').fill('1'); await ui.locator('#to').fill('3');
+    await ui.locator('#filename').fill('pagepress-pager.pdf');
+    await startCapture();
+    await source.bringToFront();
+    await ui.waitForFunction(() => ['Saved', 'Needs attention'].includes(document.getElementById('state').textContent), null, { timeout: 120000 });
+    assert.equal(await ui.locator('#state').textContent(), 'Saved', await ui.locator('#notice').textContent());
+    const pagerPages = await ui.evaluate(async () => (await PagePressStore.getPages()).sort((a, b) => a.number - b.number).map((p) => [p.number, p.width, p.height]));
+    assert.deepEqual(pagerPages, [[1, 1250, 1754], [2, 1260, 1754], [3, 1754, 1270]]);
+    await source.waitForFunction(() => document.getElementById('count').textContent === 'Page 2 of 5', null, { timeout: 15000 });
+    await retainDownload('pagepress-pager.pdf');
 
     await selectSource(origin + '/unsupported');
     await ui.waitForFunction(() => document.getElementById('notice').textContent.includes('No supported document viewer'));

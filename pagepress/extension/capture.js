@@ -49,15 +49,80 @@
     }
     return el.ownerDocument.scrollingElement || el.ownerDocument.documentElement;
   }
+  // Single-image pagers: one large page image or canvas, Next/Previous controls, and a visible page counter
+  // ("Page 3 of 12", "3 / 12", a page-number box, or a page drop-down). Pages are reached through the viewer's
+  // own controls and saved at the image's native resolution.
+  // A label matches by its words with arrows and punctuation removed ("Next ›", "« Previous"), or as a bare arrow.
+  const NEXT = { words: /^(next( page)?|आगे|अगला( पृष्ठ)?)$/i, arrows: /^[›»>→▶⟩]+$/ }, PREV = { words: /^(prev(ious)?( page)?|back|पीछे|पिछला( पृष्ठ)?)$/i, arrows: /^[‹«<←◀⟨]+$/ };
+  const labelIs = (label, kind) => { const core = label.replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); return core ? kind.words.test(core) : kind.arrows.test(label.replace(/\s+/g, '')); };
+  const NEXT_HINT = /(^|[\s_-])next([\s_-]|$)|nextpage|arrow-?right|chevron-?right/i, PREV_HINT = /(^|[\s_-])prev(ious)?([\s_-]|$)|prevpage|arrow-?left|chevron-?left/i;
+  const COUNTER = /^\s*(?:page|pg\.?|पृष्ठ)?\s*(\d{1,5})\s*(?:of|\/|से|में से)\s*(\d{1,5})\s*$/i;
+  function controlLabel(el) {
+    return [el.textContent, el.getAttribute('aria-label'), el.title, el.value, el.querySelector?.('img')?.alt].map((v) => String(v || '').trim()).filter(Boolean);
+  }
+  function findControl(doc, exact, hint, near) {
+    const candidates = [...doc.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="image"], input[type="submit"]')].filter((el) => {
+      if (el.disabled || el.getAttribute('aria-disabled') === 'true' || !el.getClientRects().length) return false;
+      const labels = controlLabel(el);
+      return labels.some((l) => l.length <= 24 && labelIs(l, exact)) || hint.test(`${el.id} ${el.className?.baseVal ?? el.className} ${el.getAttribute('aria-label') || ''} ${el.title || ''}`);
+    });
+    const centre = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+    const [x, y] = centre(near);
+    return candidates.sort((a, b) => Math.hypot(...centre(a).map((v, i) => v - [x, y][i])) - Math.hypot(...centre(b).map((v, i) => v - [x, y][i])))[0] || null;
+  }
+  // A link that loads another web page cannot be followed: the capture runs inside the current page.
+  const reloads = (el) => el?.tagName === 'A' && el.getAttribute('href') && !/^(#|javascript:)/i.test(el.getAttribute('href').trim()) && new URL(el.href, location.href).href.split('#')[0] !== el.ownerDocument.location.href.split('#')[0];
+  function counterOf(doc) {
+    for (const select of doc.querySelectorAll('select')) {
+      const values = [...select.options].map((o) => Number(o.value || o.textContent));
+      if (values.length >= 2 && values.every((v, i) => v === i + 1)) return { kind: 'select', el: select, read: () => ({ current: Number(select.value), total: select.options.length }) };
+    }
+    for (const input of doc.querySelectorAll('input:not([type]), input[type="text"], input[type="number"], input[type="tel"]')) {
+      const after = (input.parentElement?.textContent || '') + ' ' + (input.nextElementSibling?.textContent || '');
+      const total = /(?:of|\/|से|में से)\s*(\d{1,5})/i.exec(after)?.[1];
+      if (total && /^\d+$/.test(input.value.trim())) return { kind: 'input', el: input, read: () => ({ current: Number(input.value), total: Number(/(?:of|\/|से|में से)\s*(\d{1,5})/i.exec((input.parentElement?.textContent || '') + ' ' + (input.nextElementSibling?.textContent || ''))?.[1]) }) };
+    }
+    const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_ELEMENT);
+    for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+      if (el.childElementCount > 2 || el.textContent.length > 40 || !COUNTER.test(el.textContent) || !el.getClientRects().length) continue;
+      return { kind: 'text', el, read: () => { const m = COUNTER.exec(el.textContent) || []; return { current: Number(m[1]), total: Number(m[2]) }; } };
+    }
+    return null;
+  }
+  function findPager(doc) {
+    const main = () => [...doc.querySelectorAll('img, canvas')].filter((el) => !isLazy(el) && pageShaped(el))
+      .sort((a, b) => { const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect(); return rb.width * rb.height - ra.width * ra.height; })[0] || null;
+    const first = main();
+    if (!first) return null;
+    const next = findControl(doc, NEXT, NEXT_HINT, first), prev = findControl(doc, PREV, PREV_HINT, first), counter = counterOf(doc);
+    if (!next || !counter) return null;
+    const state = counter.read();
+    if (!(state.total >= 1 && state.total <= 10000 && state.current >= 1 && state.current <= state.total)) return null;
+    return { type: 'pager', doc, main, next, prev, counter, tag: first.tagName, reloads: reloads(next) || reloads(prev), scroller: scrollParent(first) };
+  }
   function findViewer() {
     const docs = documents();
     for (const doc of docs) { const found = findPdfJs(doc); if (found) return found; }
-    for (const doc of docs) { const found = findPageList(doc); if (found) return found; }
-    return null;
+    let single = null;
+    for (const doc of docs) {
+      const list = findPageList(doc);
+      if (list && list.pages().length >= 2) return list;
+      // One page image: a pager if it has Next/Previous controls and a counter, otherwise a one-page document.
+      const pager = findPager(doc);
+      if (pager) return pager;
+      single ||= list;
+    }
+    return single;
   }
   function inspect() {
     const found = findViewer();
     if (!found) throw new Error('No supported document viewer found. Open the document viewer tab, then click PagePress. Chrome\'s built-in PDF viewer is not supported.');
+    if (found.type === 'pager') {
+      if (found.reloads) throw new Error('This viewer loads a new web page for each page, which PagePress cannot follow. Capture is not supported here.');
+      const { current, total } = found.counter.read();
+      return { title: document.title, url: location.href, total, current, zoomControl: false, fixedResolution: true, sample: sourceSize(found.main()),
+        viewer: found.tag === 'IMG' ? 'Single-page image viewer' : 'Single-page canvas viewer' };
+    }
     if (found.type === 'pagelist') {
       const pages = found.pages(), first = pages.find((el) => !isLazy(el));
       const top = pages.findIndex((el) => el.getBoundingClientRect().bottom > 0);
@@ -177,14 +242,73 @@
       finally { clearTimeout(timer); }
     } finally { page.removeAttribute('data-pagepress-target'); }
   }
-  async function capturePageListItem(found, number, job) {
-    const start = performance.now(); let last = '', stableAt = start, el;
-    while (performance.now() - start < job.config.timeoutMs) {
+  // Identity of what an image or canvas currently shows, to tell a newly loaded page from the previous one.
+  function identity(el) {
+    if (!el) return '';
+    if (el.tagName === 'IMG') return `${el.currentSrc || el.src}|${el.naturalWidth}x${el.naturalHeight}`;
+    try { return fingerprint(el).signature; } catch { return `${el.width}x${el.height}`; }
+  }
+  function press(el) {
+    el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+    el.click();
+  }
+  async function until(test, ms) {
+    const start = performance.now();
+    while (performance.now() - start < ms) { if (test()) return true; await sleep(100); }
+    return test();
+  }
+  // Reach page `number` through the viewer's own controls: type it into a page box or pick it from a drop-down
+  // when the viewer has one, otherwise step with Next/Previous.
+  async function goToPage(found, number, job) {
+    const at = () => found.counter.read().current;
+    if (at() === number) return;
+    const { kind, el } = found.counter;
+    if (kind === 'input' || kind === 'select') {
+      const view = el.ownerDocument.defaultView;
+      if (kind === 'input') { el.focus(); el.value = String(number); el.dispatchEvent(new view.Event('input', { bubbles: true })); }
+      else el.value = String(number);
+      el.dispatchEvent(new view.Event('change', { bubbles: true }));
+      if (kind === 'input') for (const type of ['keydown', 'keypress', 'keyup']) el.dispatchEvent(new view.KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      if (await until(() => at() === number, 3000)) return;
+    }
+    for (let steps = 0; at() !== number; steps++) {
       check(job);
+      const forward = at() < number, control = forward ? found.next : found.prev;
+      if (!control || steps > found.counter.read().total + 2) throw new Error(`Could not reach page ${number} with the viewer's ${forward ? 'Next' : 'Previous'} button.`);
+      const before = at();
+      press(control);
+      if (!await until(() => at() !== before, job.config.timeoutMs)) throw new Error(`The viewer did not move past page ${before}. Retry with Slow viewer timing.`);
+    }
+  }
+  async function capturePagerItem(found, number, job) {
+    const before = identity(found.main());
+    await goToPage(found, number, job);
+    // The counter often changes before the new image arrives: wait for different pixels (or, for two identical
+    // pages in a row, half the timeout) so the previous page is never saved under the new number.
+    const changedAt = performance.now();
+    return captureElement(number, job, () => {
+      if (found.counter.read().current !== number) throw new Error(`The viewer left page ${number} during capture.`);
+      const el = found.main();
+      return el && (identity(el) !== before || before === '' || performance.now() - changedAt > job.config.timeoutMs / 2) ? el : null;
+    }, found.doc);
+  }
+  async function capturePageListItem(found, number, job) {
+    let current;
+    return captureElement(number, job, () => {
       const pages = found.pages();
       if (pages.length < number) throw new Error(`Page ${number} is no longer in this viewer. Reload the document and retry.`);
-      if (el !== pages[number - 1]) { el = pages[number - 1]; el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); last = ''; stableAt = performance.now(); }
-      const size = sourceSize(el), ready = (el.tagName !== 'IMG' || el.complete) && size.width >= MIN_SOURCE && size.height > 0;
+      if (current !== pages[number - 1]) { current = pages[number - 1]; current.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); }
+      return current;
+    }, found.doc);
+  }
+  // Wait until pick() returns a loaded, stable page element, then save its native pixels.
+  async function captureElement(number, job, pick, doc) {
+    const start = performance.now(); let last = '', stableAt = start, el, previous;
+    while (performance.now() - start < job.config.timeoutMs) {
+      check(job);
+      el = pick();
+      if (el !== previous) { previous = el; last = ''; stableAt = performance.now(); }
+      const size = el ? sourceSize(el) : { width: 0, height: 0 }, ready = el && (el.tagName !== 'IMG' || el.complete) && size.width >= MIN_SOURCE && size.height > 0;
       if (ready) {
         let probe;
         try { probe = fingerprint(el); } catch {
@@ -194,7 +318,7 @@
         if (last !== probe.signature) { last = probe.signature; stableAt = performance.now(); }
         if (performance.now() - stableAt >= job.config.settleMs) {
           if (size.width * size.height > 32000000) throw new Error(`Page ${number} is too large to export (over 32 million pixels).`);
-          const output = found.doc.createElement('canvas'); output.width = size.width; output.height = size.height;
+          const output = doc.createElement('canvas'); output.width = size.width; output.height = size.height;
           const ctx = output.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size.width, size.height); ctx.drawImage(el, 0, 0, size.width, size.height);
           let data;
           try { data = output.toDataURL('image/png'); } catch { throw new Error(`Page ${number} has protected or cross-origin content and cannot be exported.`); }
@@ -245,12 +369,13 @@
     let found, original, failure = null;
     try {
       found = findViewer(); if (!found) throw new Error('The document viewer is no longer available.');
-      if (found.type === 'pagelist') {
-        original = { left: found.scroller.scrollLeft, top: found.scroller.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
+      if (found.type !== 'pdfjs') {
+        if (found.reloads) throw new Error('This viewer loads a new web page for each page, which PagePress cannot follow.');
+        original = { page: found.type === 'pager' ? found.counter.read().current : null, left: found.scroller.scrollLeft, top: found.scroller.scrollTop, windowX: found.doc.defaultView.scrollX, windowY: found.doc.defaultView.scrollY };
         for (const number of job.config.pages) {
           check(job); job.current = number;
           await notify(job, 'progress', { number, phase: 'loading' });
-          await deliver(job, number, await capturePageListItem(found, number, job));
+          await deliver(job, number, await (found.type === 'pager' ? capturePagerItem(found, number, job) : capturePageListItem(found, number, job)));
         }
         return;
       }
@@ -270,7 +395,8 @@
     finally {
       if (found && original && location.href === job.config.sourceUrl) {
         try {
-          // Page lists have no zoom or page control; only their scroll position is restored.
+          // Pagers return to the original page; page lists have no zoom or page control, only a scroll position.
+          if (found.type === 'pager' && original.page) await goToPage(found, original.page, { ...job, cancelled: false, config: { ...job.config, timeoutMs: 10000 } });
           if (found.type === 'pdfjs') {
             if (original.zoom) zoom(found, original.zoom);
             navigate(found, original.page);
@@ -295,11 +421,12 @@
     let found;
     try { found = findViewer(); Object.assign(report, (({ viewer, total, zoomControl }) => ({ viewer, pages: total, zoomControl }))(inspect())); }
     catch (error) { report.notes.push(error.message); return report; }
-    const sampleEl = found.type === 'pdfjs' ? found.viewer.querySelector('.page[data-page-number] canvas') : found.pages().find((el) => !isLazy(el));
+    const sampleEl = found.type === 'pdfjs' ? found.viewer.querySelector('.page[data-page-number] canvas') : found.type === 'pager' ? found.main() : found.pages().find((el) => !isLazy(el));
     if (!sampleEl) { report.notes.push('No page has finished rendering yet. Wait for the first page, then check again.'); report.verdict = 'partial'; return report; }
     report.sample = sourceSize(sampleEl);
     try { fingerprint(sampleEl); report.readable = true; } catch { report.readable = false; report.notes.push('Page pixels are blocked by browser origin rules (cross-origin or protected content).'); return report; }
     if (found.type === 'pagelist' && found.pages().some(isLazy)) report.notes.push('Some pages load only when scrolled into view; PagePress scrolls to each page during capture.');
+    if (found.type === 'pager') report.notes.push(`Single-page viewer: PagePress moves through pages with its ${found.counter.kind === 'text' ? 'Next/Previous buttons' : `page ${found.counter.kind === 'select' ? 'drop-down' : 'number box'}`}.`);
     if (found.type === 'pdfjs' && !report.zoomControl) report.notes.push('No zoom control: pages are captured at the viewer\'s current zoom.');
     const sharp = report.sample.width >= 1200;
     if (!sharp && !(found.type === 'pdfjs' && report.zoomControl)) report.notes.push(`Sample page is ${report.sample.width} x ${report.sample.height} px, below the 1,200 px clear-print guide. ${found.type === 'pdfjs' ? 'Try a higher zoom.' : 'This is the source image\'s own resolution.'}`);

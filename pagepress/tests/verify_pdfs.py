@@ -8,7 +8,7 @@ from pypdf.generic import ContentStream
 from PIL import Image, ImageDraw
 
 root = Path(__file__).resolve().parents[2] / "test-results/pagepress"
-cases = [("pagepress-21-pages.pdf", 21, 1200), ("pagepress-resumed-range.pdf", 3, 1200), ("pagepress-real-pdfjs.pdf", 6, 1500), ("pagepress-image-viewer.pdf", 4, 1240)]
+cases = [("pagepress-21-pages.pdf", 21, 1200), ("pagepress-resumed-range.pdf", 3, 1200), ("pagepress-real-pdfjs.pdf", 6, 1500), ("pagepress-image-viewer.pdf", 4, 1240), ("pagepress-pager.pdf", 3, 1250)]
 results = []
 contact = Image.new("RGB", (1000, 720), "#e8eeea")
 draw = ImageDraw.Draw(contact)

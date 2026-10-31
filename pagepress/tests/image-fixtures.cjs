@@ -21,10 +21,11 @@ function png(width, height, draw) {
 // A scanned-sheet stand-in: dark header band, one bar per page number (so order can be verified),
 // and coloured corner markers to prove edges are intact.
 const cache = new Map();
-function pageImage(number, { landscape = false, small = false } = {}) {
-  const key = `${number}:${landscape}:${small}`;
+// `tagged` widens each page by 10 px per page number so tests can verify page order from image sizes alone.
+function pageImage(number, { landscape = false, small = false, tagged = false } = {}) {
+  const key = `${number}:${landscape}:${small}:${tagged}`;
   if (cache.has(key)) return cache.get(key);
-  let width = small ? 900 : 1240, height = small ? 1273 : 1754;
+  let width = (small ? 900 : 1240) + (tagged ? number * 10 : 0), height = small ? 1273 : 1754;
   if (landscape) [width, height] = [height, width];
   const image = png(width, height, (x, y) => {
     if (x < 24 && y < 24) return [23, 101, 75];
@@ -47,7 +48,37 @@ function handle(req, res, otherOrigin) {
   const url = new URL(req.url, 'http://localhost');
   const send = (type, body) => { res.writeHead(200, { 'Content-Type': type, 'Access-Control-Allow-Origin': url.searchParams.get('cors') ? '*' : '' }); res.end(body); return true; };
   const image = /^\/page-image\/(\d+)\.png$/.exec(url.pathname);
-  if (image) return send('image/png', pageImage(Number(image[1]), { landscape: url.searchParams.has('landscape'), small: url.searchParams.has('small') }));
+  if (image) return send('image/png', pageImage(Number(image[1]), { landscape: url.searchParams.has('landscape'), small: url.searchParams.has('small'), tagged: url.searchParams.has('tagged') }));
+  if (url.pathname === '/pager-viewer') {
+    // One page at a time. The counter changes at once but the new page arrives 1.5 s later, like slow portals,
+    // so a capture that trusts the counter alone would save the previous page. The delay (1.5 s) is longer than PagePress's
+    // normal settle time, so waiting for a stable picture alone would not catch it either.
+    const total = Number(url.searchParams.get('pages') || 5), mode = url.searchParams.get('mode') || 'text';
+    const start = Number(url.searchParams.get('page') || url.searchParams.get('start') || 2);
+    const counter = mode === 'input' ? `<input id="pg" value="${start}" size="3"> <span>/ ${total}</span>`
+      : mode === 'select' ? `<select id="pg">${Array.from({ length: total }, (_, i) => `<option${i + 1 === start ? ' selected' : ''}>${i + 1}</option>`).join('')}</select>`
+        : `<span id="count">Page ${start} of ${total}</span>`;
+    const controls = mode === 'reload'
+      ? `<a id="prev" href="?mode=reload&page=${start - 1}">‹ Prev</a> ${counter} <a id="next" href="?mode=reload&page=${start + 1}">Next ›</a>`
+      : `<button id="prev" type="button">‹ Prev</button> ${counter} <button id="next" type="button">Next ›</button>`;
+    const stage = mode === 'canvas' ? '<canvas id="page" width="1300" height="1840"></canvas>' : '<img id="page" alt="Document page">';
+    return send('text/html', html('Single page viewer', `<div class="toolbar" style="color:#fff;padding:8px">${controls}</div><div class="sheet" style="width:600px">${stage}</div>`, `
+      const total = ${total}, mode = '${mode}'; let current = ${start}, token = 0;
+      const page = document.getElementById('page'), pg = document.getElementById('pg'), count = document.getElementById('count');
+      function draw(n) {
+        if (mode === 'canvas') { page.width = 1300 + n * 10; const x = page.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, page.width, page.height); x.font = '80px Arial'; x.fillStyle = '#111'; x.fillText('CANVAS PAGE ' + n, 80, 300); }
+        else page.src = '/page-image/' + n + '.png?tagged=1' + (n === 3 ? '&landscape=1' : '');
+      }
+      function go(n) {
+        n = Math.max(1, Math.min(total, n)); current = n;
+        if (count) count.textContent = 'Page ' + n + ' of ' + total; if (pg) pg.value = String(n);
+        const t = ++token; setTimeout(() => { if (t === token) draw(n); }, 1500);
+      }
+      draw(current);
+      if (mode !== 'reload') { document.getElementById('next').onclick = () => go(current + 1); document.getElementById('prev').onclick = () => go(current - 1); }
+      if (mode === 'input') pg.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(Number(pg.value)); });
+      if (mode === 'select') pg.addEventListener('change', () => go(Number(pg.value)));`));
+  }
   if (url.pathname === '/image-viewer') {
     // Pages 1-2 load eagerly; later pages are lazy (placeholder src + data-src, loaded when scrolled near), like many portals.
     const total = Number(url.searchParams.get('pages') || 6), small = url.searchParams.has('small') ? '?small=1' : '';
