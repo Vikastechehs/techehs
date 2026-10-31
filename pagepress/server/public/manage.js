@@ -12,7 +12,9 @@
     $('account').hidden = false; message('');
     const date = account.expires_at ? new Date(account.expires_at).toLocaleDateString() : 'unknown';
     $('status').textContent = account.status === 'active' ? 'Pro is active' : account.status === 'disabled' ? 'This license is disabled. Contact support.' : 'This subscription has ended';
-    $('period').textContent = account.status !== 'active' ? `Ended ${date}.` : account.renewal_cancelled ? `Renewal cancelled. Pro remains active until ${date}.` : `Renews on ${date}.`;
+    const pass = account.plan !== 'year';
+    $('status').textContent = ($('status').textContent) + (pass ? ` · ${account.plan === 'week' ? '1-week' : '1-month'} pass` : ' · yearly plan');
+    $('period').textContent = account.status !== 'active' ? `Ended ${date}.` : pass ? `Active until ${date}. Passes do not renew.` : account.renewal_cancelled ? `Renewal cancelled. Pro remains active until ${date}.` : `Renews on ${date}.`;
     $('usage').textContent = `${account.instances.length} of ${account.activation_limit} activations used.`;
     $('instances').replaceChildren(...account.instances.map((instance) => {
       const item = document.createElement('li'), label = document.createElement('span'), button = document.createElement('button');
@@ -21,7 +23,8 @@
       button.addEventListener('click', () => run('release', { instance_id: instance.id }));
       item.append(label, button); return item;
     }));
-    $('cancel').hidden = account.status !== 'active' || account.renewal_cancelled;
+    $('cancel').hidden = pass || account.status !== 'active' || account.renewal_cancelled;
+    $('cancel-note').hidden = $('cancel').hidden;
   }
   async function run(action, extra) {
     try { render(await call(action, extra)); } catch (error) { message(error.message, true); }

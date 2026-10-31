@@ -9,7 +9,8 @@ function openDatabase(file) {
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
     CREATE TABLE IF NOT EXISTS checkouts (
-      subscription_id TEXT PRIMARY KEY,
+      purchase_id TEXT PRIMARY KEY,
+      plan TEXT NOT NULL DEFAULT 'year',
       email TEXT NOT NULL,
       currency TEXT NOT NULL,
       claim_hash TEXT NOT NULL,
@@ -18,7 +19,8 @@ function openDatabase(file) {
     );
     CREATE TABLE IF NOT EXISTS licenses (
       key TEXT PRIMARY KEY,
-      subscription_id TEXT NOT NULL UNIQUE,
+      purchase_id TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'year',
       email TEXT NOT NULL,
       currency TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('active', 'expired', 'disabled')),

@@ -9,6 +9,19 @@ function loadConfig(env = process.env) {
   if (publicUrl.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(publicUrl.hostname)) throw new Error('PUBLIC_URL must use HTTPS.');
   const plans = { INR: required('RAZORPAY_PLAN_ID_INR') };
   if (env.RAZORPAY_PLAN_ID_USD) plans.USD = String(env.RAZORPAY_PLAN_ID_USD).trim();
+  // One-time passes: amounts in paise/cents, e.g. PASS_WEEK_INR=19900. A pass without an amount is not sold.
+  const passes = {};
+  for (const [name, days] of [['week', 7], ['month', 30]]) {
+    const amounts = {};
+    for (const currency of ['INR', 'USD']) {
+      const raw = env[`PASS_${name.toUpperCase()}_${currency}`];
+      if (raw === undefined || raw === '') continue;
+      const amount = Number(raw);
+      if (!/^\d+$/.test(String(raw).trim()) || amount < 100) throw new Error(`PASS_${name.toUpperCase()}_${currency} must be an amount in paise/cents (at least 100).`);
+      amounts[currency] = amount;
+    }
+    if (Object.keys(amounts).length) passes[name] = { days, amounts };
+  }
   const activationLimit = Number(env.ACTIVATION_LIMIT || 2);
   const totalCount = Number(env.SUBSCRIPTION_TOTAL_COUNT || 10);
   if (!Number.isInteger(activationLimit) || activationLimit < 1 || activationLimit > 20) throw new Error('ACTIVATION_LIMIT must be an integer from 1 to 20.');
@@ -22,6 +35,7 @@ function loadConfig(env = process.env) {
     keySecret: required('RAZORPAY_KEY_SECRET'),
     webhookSecret: required('RAZORPAY_WEBHOOK_SECRET'),
     plans,
+    passes,
     activationLimit,
     totalCount,
     // Only needed if the INR price is set lower than the USD price (regional pricing).

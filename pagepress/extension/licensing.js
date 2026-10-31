@@ -4,12 +4,19 @@
   const FREE_LIMIT = 5, PRO_LIMIT = 200;
   // Keys issued by the PagePress license server (Razorpay purchases) carry this prefix; Lemon Squeezy keys do not.
   const SERVER_KEY = /^PP(-[A-Z2-7]{5}){4}$/;
-  function lemonConfigured(config) {
+  const PLANS = ['week', 'month', 'year'];
+  function lemonPlanValid(plan) {
     try {
-      const url = new URL(config.checkoutUrl);
-      return ['storeId', 'productId', 'variantId'].every((id) => Number.isSafeInteger(config[id]) && config[id] > 0) &&
+      const url = new URL(plan.checkoutUrl);
+      return ['productId', 'variantId'].every((id) => Number.isSafeInteger(plan[id]) && plan[id] > 0) &&
         url.protocol === 'https:' && /^[a-z0-9-]+\.lemonsqueezy\.com$/.test(url.hostname) && /^\/buy\/[a-zA-Z0-9-]+\/?$/.test(url.pathname) && !url.username && !url.password && !url.port;
     } catch { return false; }
+  }
+  // Lemon Squeezy plans that are fully configured: the yearly subscription and/or 1-week and 1-month passes
+  // (one-time products whose license keys expire after 7 or 30 days).
+  function lemonPlans(c) {
+    if (!c || !Number.isSafeInteger(c.storeId) || c.storeId <= 0) return {};
+    return Object.fromEntries(PLANS.filter((p) => c.plans?.[p] && lemonPlanValid(c.plans[p])).map((p) => [p, c.plans[p]]));
   }
   function serverBase(config) {
     try {
@@ -21,42 +28,55 @@
   }
   const providers = {
     lemonsqueezy: {
-      configured: (c) => !!c && lemonConfigured(c),
+      configured: (c) => Object.keys(lemonPlans(c)).length > 0,
       base: () => LEMON_ORIGIN + '/',
       origin: () => LEMON_ORIGIN + '/*',
       assertProduct(data, c) {
-        if (!data.meta || data.meta.store_id !== c.storeId || data.meta.product_id !== c.productId || data.meta.variant_id !== c.variantId) throw new Error('This license is not for PagePress Pro.');
+        const ok = data.meta && data.meta.store_id === c.storeId &&
+          Object.values(lemonPlans(c)).some((p) => data.meta.product_id === p.productId && data.meta.variant_id === p.variantId);
+        if (!ok) throw new Error('This license is not for PagePress Pro.');
       },
-      checkout: (c) => c.checkoutUrl,
-      portal: (c) => new URL('/billing', c.checkoutUrl).href
+      checkout: (c, currency, plan) => lemonPlans(c)[plan]?.checkoutUrl,
+      planOf: (data, c) => Object.entries(lemonPlans(c)).find(([, p]) => p.variantId === data.meta?.variant_id)?.[0] || 'year',
+      portal: (c) => new URL('/billing', Object.values(lemonPlans(c))[0].checkoutUrl).href
     },
     razorpay: {
-      configured: (c) => !!c && !!serverBase(c) && !!(c.inrPriceLabel || c.usdPriceLabel),
+      configured: (c) => !!c && !!serverBase(c) && Object.values(c.prices || {}).some((labels) => PLANS.some((p) => labels?.[p])),
       base: (c) => serverBase(c),
       origin: (c) => new URL(serverBase(c)).origin + '/*',
       assertProduct(data) {
         if (!data.meta || data.meta.store !== 'pagepress' || data.meta.product !== 'pagepress-pro' || data.meta.provider !== 'razorpay') throw new Error('This license is not for PagePress Pro.');
       },
-      checkout: (c, currency) => serverBase(c) + 'buy?currency=' + currency,
+      checkout: (c, currency, plan) => serverBase(c) + `buy?currency=${currency}&plan=${plan}`,
+      planOf: (data) => (PLANS.includes(data.meta?.plan) ? data.meta.plan : 'year'),
       portal: (c) => serverBase(c) + 'manage'
     }
   };
-  // Older single-provider configs were a flat Lemon Squeezy object.
+  // Accepts the current shape and older ones: a flat Lemon Squeezy object (0.3), or single yearly labels/IDs (0.4.0).
   function normalize(config = {}) {
-    if (config.lemonsqueezy || config.razorpay) return { lemonsqueezy: config.lemonsqueezy || null, razorpay: config.razorpay || null };
-    return { lemonsqueezy: config.provider === 'lemonsqueezy' ? config : null, razorpay: null };
+    const flatLemon = config.provider === 'lemonsqueezy' ? config : null;
+    let lemon = config.lemonsqueezy || flatLemon || null, rzp = config.razorpay || null;
+    if (lemon && !lemon.plans && (lemon.variantId || lemon.checkoutUrl)) {
+      lemon = { storeId: lemon.storeId, plans: { year: { productId: lemon.productId, variantId: lemon.variantId, checkoutUrl: lemon.checkoutUrl, priceLabel: lemon.priceLabel } } };
+    }
+    if (rzp && !rzp.prices) {
+      rzp = { serverUrl: rzp.serverUrl, prices: { INR: rzp.inrPriceLabel ? { year: rzp.inrPriceLabel } : {}, USD: rzp.usdPriceLabel ? { year: rzp.usdPriceLabel } : {} } };
+    }
+    return { lemonsqueezy: lemon, razorpay: rzp };
   }
   function configured(config) {
     const c = normalize(config);
     return providers.lemonsqueezy.configured(c.lemonsqueezy) || providers.razorpay.configured(c.razorpay);
   }
-  // Each currency is sold by exactly one provider: INR through Razorpay, USD through Lemon Squeezy when configured, otherwise Razorpay.
+  // INR is sold through Razorpay; USD through Lemon Squeezy when configured, otherwise through Razorpay.
+  // Each offer is one plan (week, month or year) in one currency.
   function offers(config) {
     const c = normalize(config), list = [];
-    const rzp = providers.razorpay.configured(c.razorpay), lemon = providers.lemonsqueezy.configured(c.lemonsqueezy);
-    if (rzp && c.razorpay.inrPriceLabel) list.push({ currency: 'INR', provider: 'razorpay', priceLabel: c.razorpay.inrPriceLabel });
-    if (lemon) list.push({ currency: 'USD', provider: 'lemonsqueezy', priceLabel: c.lemonsqueezy.priceLabel || '$12/year' });
-    else if (rzp && c.razorpay.usdPriceLabel) list.push({ currency: 'USD', provider: 'razorpay', priceLabel: c.razorpay.usdPriceLabel });
+    const rzp = providers.razorpay.configured(c.razorpay), lemon = lemonPlans(c.lemonsqueezy);
+    const add = (currency, provider, labels) => PLANS.forEach((plan) => labels?.[plan] && list.push({ currency, provider, plan, priceLabel: labels[plan] }));
+    if (rzp) add('INR', 'razorpay', c.razorpay.prices.INR);
+    if (Object.keys(lemon).length) add('USD', 'lemonsqueezy', Object.fromEntries(Object.entries(lemon).map(([p, v]) => [p, v.priceLabel || p])));
+    else if (rzp) add('USD', 'razorpay', c.razorpay.prices.USD);
     return list;
   }
   // Server keys use base32 (no 0, 1 or 8), so typed look-alikes and lowercase can be corrected safely.
@@ -108,9 +128,7 @@
       return saved && { ...saved, provider: saved.provider || 'lemonsqueezy' };
     }
     function summary(pro, saved, error = '') {
-      const list = offers(config);
-      return { plan: pro ? 'pro' : 'free', pageLimit: pro ? PRO_LIMIT : FREE_LIMIT, configured: isConfigured(), offers: list,
-        priceLabel: list.map((o) => o.priceLabel).join(' or '), provider: saved?.provider || null,
+      return { plan: pro ? 'pro' : 'free', pageLimit: pro ? PRO_LIMIT : FREE_LIMIT, configured: isConfigured(), offers: offers(config), provider: saved?.provider || null, licensePlan: pro ? saved.plan || 'year' : null,
         hasLicense: !!saved, keySuffix: saved?.key?.slice(-4) || '', expiresAt: pro ? saved.expiresAt : null, error };
     }
     async function refresh() {
@@ -122,7 +140,7 @@
         if (data.valid !== true) throw new Error(data.error || 'This license is no longer valid.');
         p.assertProduct(data, p.config); assertActive(data, saved.key);
         if (!saved.instanceId || data.instance?.id !== saved.instanceId) throw new Error('This browser activation is no longer valid.');
-        return summary(true, { ...saved, expiresAt: data.license_key.expires_at });
+        return summary(true, { ...saved, expiresAt: data.license_key.expires_at, plan: p.planOf(data, p.config) });
       } catch (error) { return summary(false, saved, error.message); }
     }
     async function activate(inputKey, inputEmail) {
@@ -146,7 +164,7 @@
         if (String(checked.meta.customer_email || '').trim().toLowerCase() !== email) throw new Error('The email does not match this license purchase.');
         const data = await request(name, 'activate', { license_key: key, instance_name: 'PagePress browser' });
         if (data.activated !== true || typeof data.instance?.id !== 'string' || !data.instance.id) throw new Error(data.error || 'License activation failed.');
-        const value = { provider: name, key, email, instanceId: data.instance.id, expiresAt: data.license_key?.expires_at, activatedAt: new Date().toISOString() };
+        const value = { provider: name, key, email, instanceId: data.instance.id, expiresAt: data.license_key?.expires_at, plan: p.planOf(data, p.config), activatedAt: new Date().toISOString() };
         // Retain the instance before final checks so a remote activation can still be deactivated after an error.
         await storage.set({ [STORAGE_KEY]: value });
         p.assertProduct(data, p.config); assertActive(data, key);
@@ -171,11 +189,11 @@
       const status = await refresh();
       return { ...status, allowed: status.plan === 'pro', error: status.error || (status.plan !== 'pro' ? 'Free captures include up to 5 pages. Activate Pro for larger captures.' : '') };
     }
-    function checkout(currency = 'USD') {
-      const offer = offers(config).find((o) => o.currency === currency);
-      if (!offer) throw new Error('Pro purchases are not available yet. You can continue using Free.');
+    function checkout(currency = 'USD', plan = 'year') {
+      const offer = offers(config).find((o) => o.currency === currency && o.plan === plan);
+      if (!offer) throw new Error('This plan is not available yet. You can continue using Free.');
       const p = provider(offer.provider);
-      return p.checkout(p.config, currency);
+      return p.checkout(p.config, currency, plan);
     }
     async function portal() {
       const saved = await record();
@@ -192,6 +210,6 @@
     }
     return { refresh, activate, deactivate, authorize, checkout, portal, permissionFor };
   }
-  root.PagePressLicensing = { createClient, configured, offers, providerForKey, FREE_LIMIT, PRO_LIMIT, ORIGIN: LEMON_ORIGIN, STORAGE_KEY };
+  root.PagePressLicensing = { createClient, configured, offers, providerForKey, normalize, PLANS, FREE_LIMIT, PRO_LIMIT, ORIGIN: LEMON_ORIGIN, STORAGE_KEY };
   if (typeof module !== 'undefined') module.exports = root.PagePressLicensing;
 })(globalThis);

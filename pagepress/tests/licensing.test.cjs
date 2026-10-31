@@ -108,7 +108,7 @@ test('unreadable provider responses keep Free and the saved license with a clear
 const rzp = { serverUrl: 'https://licenses.pagepress.test', inrPriceLabel: '₹799/year' };
 const serverKey = 'PP-ABCDE-FGHIJ-KLMNO-PQRS2';
 test('INR is sold through Razorpay and USD through Lemon Squeezy, each only when configured', () => {
-  assert.deepEqual(offers({ razorpay: rzp, lemonsqueezy: config }).map((o) => [o.currency, o.provider, o.priceLabel]), [['INR', 'razorpay', '₹799/year'], ['USD', 'lemonsqueezy', '$19/year']]);
+  assert.deepEqual(offers({ razorpay: rzp, lemonsqueezy: config }).map((o) => [o.currency, o.provider, o.plan, o.priceLabel]), [['INR', 'razorpay', 'year', '₹799/year'], ['USD', 'lemonsqueezy', 'year', '$19/year']], 'Older 0.4.0 configs still work');
   assert.deepEqual(offers({ razorpay: { ...rzp, usdPriceLabel: '$19/year' } }).map((o) => [o.currency, o.provider]), [['INR', 'razorpay'], ['USD', 'razorpay']]);
   assert.deepEqual(offers(config).map((o) => o.currency), ['USD'], 'Legacy flat Lemon Squeezy config still works');
   assert.deepEqual(offers({ razorpay: null, lemonsqueezy: { ...config, storeId: null } }), []);
@@ -118,7 +118,7 @@ test('INR is sold through Razorpay and USD through Lemon Squeezy, each only when
   assert.equal(providerForKey(' pp-abcde-fghij-kl0mn-pqrs2 '), 'razorpay', 'Lowercase and 0-for-O typos still route to the license server');
   assert.equal(providerForKey('38b1460a-5104-4067-a91d-77b872934d51'), 'lemonsqueezy');
   const client = createClient({ config: { razorpay: rzp, lemonsqueezy: config }, storage: { async get(n) { return { [n]: undefined }; } } });
-  assert.equal(client.checkout('INR'), 'https://licenses.pagepress.test/buy?currency=INR');
+  assert.equal(client.checkout('INR'), 'https://licenses.pagepress.test/buy?currency=INR&plan=year');
   assert.equal(client.checkout('USD'), config.checkoutUrl);
   assert.equal(client.permissionFor({ key: serverKey }), 'https://licenses.pagepress.test/*');
   assert.equal(client.permissionFor({ key: key }), 'https://api.lemonsqueezy.com/*');
@@ -142,4 +142,39 @@ test('Razorpay keys are verified with the PagePress license server, and cross-st
   assert.equal(await client.portal(), 'https://licenses.pagepress.test/manage');
   const lemonOnly = createClient({ config, storage: { async get(n) { return { [n]: undefined }; } }, fetcher: async () => { throw new Error('no request expected'); } });
   await assert.rejects(lemonOnly.activate(serverKey, email), /India \(INR\) store/);
+});
+
+const plansConfig = {
+  razorpay: { serverUrl: 'https://licenses.pagepress.test', prices: { INR: { week: '₹249/week', month: '₹449/month', year: '₹999/year' } } },
+  lemonsqueezy: { storeId: 11, plans: {
+    week: { productId: 44, variantId: 401, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/week', priceLabel: '$2.99/week' },
+    year: { productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$12/year' },
+    month: { productId: 44, variantId: null, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/month', priceLabel: '$4.99/month' } } }
+};
+test('week, month and year plans per currency; incomplete plans are not offered', () => {
+  assert.deepEqual(offers(plansConfig).map((o) => `${o.currency} ${o.plan} ${o.provider}`),
+    ['INR week razorpay', 'INR month razorpay', 'INR year razorpay', 'USD week lemonsqueezy', 'USD year lemonsqueezy']);
+  const client = createClient({ config: plansConfig, storage: { async get(n) { return { [n]: undefined }; } } });
+  assert.equal(client.checkout('INR', 'week'), 'https://licenses.pagepress.test/buy?currency=INR&plan=week');
+  assert.equal(client.checkout('USD', 'week'), 'https://pagepress-test.lemonsqueezy.com/buy/week');
+  assert.throws(() => client.checkout('USD', 'month'), /not available/);
+});
+test('Lemon Squeezy pass and yearly variants are accepted; other variants of the same store are not', async () => {
+  for (const [variant, product, expected] of [[401, 44, 'week'], [33, 22, 'year']]) {
+    const values = {};
+    const storage = { async get(n) { return { [n]: values[n] }; }, async set(d) { Object.assign(values, d); }, async remove(n) { delete values[n]; } };
+    const client = createClient({ config: plansConfig, storage, fetcher: async (url) => ({ ok: true, status: 200, json: async () => ({
+      valid: true, activated: url.endsWith('activate'), error: null, license_key: { key, status: 'active', expires_at: '2099-01-01T00:00:00.000Z' },
+      instance: { id: 'inst' }, meta: { store_id: 11, product_id: product, variant_id: variant, customer_email: email } }) }) });
+    const status = await client.activate(key, email);
+    assert.equal(status.licensePlan, expected);
+  }
+  const client = createClient({ config: plansConfig, storage: { async get(n) { return { [n]: undefined }; }, async set() {} }, fetcher: async () => ({ ok: true, status: 200, json: async () => ({
+    valid: true, error: null, license_key: { key, status: 'active', expires_at: null }, meta: { store_id: 11, product_id: 44, variant_id: 999, customer_email: email } }) }) });
+  await assert.rejects(client.activate(key, email), /not for PagePress Pro/);
+});
+test('an expired 1-week pass no longer grants Pro', async () => {
+  const h = harness({ values: saved(), mutate: (data) => { data.license_key.expires_at = new Date(Date.now() - 1000).toISOString(); } });
+  const status = await h.client.refresh();
+  assert.equal(status.plan, 'free'); assert.match(status.error, /expired/);
 });

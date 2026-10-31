@@ -27,10 +27,10 @@ function licenseStatus(subscription) {
 function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now() / 1000) }) {
   const q = {
     license: db.prepare('SELECT * FROM licenses WHERE key = ?'),
-    bySubscription: db.prepare('SELECT * FROM licenses WHERE subscription_id = ?'),
-    insert: db.prepare(`INSERT INTO licenses (key, subscription_id, email, currency, status, expires_at, activation_limit, synced_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
-    sync: db.prepare('UPDATE licenses SET status = ?, expires_at = ?, synced_at = ? WHERE subscription_id = ? AND status != \'disabled\''),
+    byPurchase: db.prepare('SELECT * FROM licenses WHERE purchase_id = ?'),
+    insert: db.prepare(`INSERT INTO licenses (key, purchase_id, plan, email, currency, status, expires_at, activation_limit, synced_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+    sync: db.prepare('UPDATE licenses SET status = ?, expires_at = ?, synced_at = ? WHERE purchase_id = ? AND status != \'disabled\''),
     cancelRenewal: db.prepare('UPDATE licenses SET renewal_cancelled = 1 WHERE key = ?'),
     instance: db.prepare('SELECT * FROM instances WHERE id = ? AND license_key = ? AND revoked_at IS NULL'),
     instances: db.prepare('SELECT * FROM instances WHERE license_key = ? AND revoked_at IS NULL ORDER BY created_at'),
@@ -50,34 +50,39 @@ function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now(
         activation_usage: q.usage.get(license.key).n, created_at: iso(license.created_at), expires_at: iso(license.expires_at)
       },
       instance: instance ? { id: instance.id, name: instance.name, created_at: iso(instance.created_at) } : null,
-      meta: { store: 'pagepress', product: 'pagepress-pro', provider: 'razorpay', currency: license.currency, customer_email: license.email }
+      meta: { store: 'pagepress', product: 'pagepress-pro', provider: 'razorpay', plan: license.plan, currency: license.currency, customer_email: license.email }
     };
   }
 
-  // Create the license for a paid subscription exactly once; later calls return the existing license.
-  function issue({ subscription, email, currency }) {
-    const existing = q.bySubscription.get(subscription.id);
-    if (existing) return existing;
-    const status = licenseStatus(subscription);
-    if (status !== 'active') return null;
+  function insert(purchaseId, plan, email, currency, expiresAt) {
     const t = now(), key = newKey();
-    q.insert.run(key, subscription.id, String(email).trim().toLowerCase(), currency, status,
-      subscription.current_end || t + PROVISIONAL_SECONDS, config.activationLimit, t, t);
+    q.insert.run(key, purchaseId, plan, String(email).trim().toLowerCase(), currency, 'active', expiresAt, config.activationLimit, t, t);
     return q.license.get(key);
   }
+  // Create the license for a paid yearly subscription exactly once; later calls return the existing license.
+  function issue({ subscription, email, currency }) {
+    const existing = q.byPurchase.get(subscription.id);
+    if (existing) return existing;
+    if (licenseStatus(subscription) !== 'active') return null;
+    return insert(subscription.id, 'year', email, currency, subscription.current_end || now() + PROVISIONAL_SECONDS);
+  }
+  // A one-time pass (1 week or 1 month) runs from payment and never renews.
+  function issuePass({ orderId, plan, days, email, currency }) {
+    return q.byPurchase.get(orderId) || insert(orderId, plan, email, currency, now() + days * 86400);
+  }
   function sync(subscription) {
-    const license = q.bySubscription.get(subscription.id);
+    const license = q.byPurchase.get(subscription.id);
     const status = licenseStatus(subscription);
     if (!license || !status) return license || null;
     const expires = status === 'active' ? subscription.current_end || license.expires_at : Math.min(license.expires_at || now(), subscription.ended_at || now());
     q.sync.run(status, expires, now(), subscription.id);
-    return q.bySubscription.get(subscription.id);
+    return q.byPurchase.get(subscription.id);
   }
   // A missed renewal webhook must not cut off a paying customer: re-read the subscription at most hourly.
   async function current(key) {
     let license = q.license.get(key);
-    if (license && effectiveStatus(license) === 'expired' && license.status === 'active' && now() - license.synced_at > RESYNC_SECONDS) {
-      try { sync(await razorpay.getSubscription(license.subscription_id)); } catch { /* Keep the stored state when Razorpay is unreachable. */ }
+    if (license && license.plan === 'year' && effectiveStatus(license) === 'expired' && license.status === 'active' && now() - license.synced_at > RESYNC_SECONDS) {
+      try { sync(await razorpay.getSubscription(license.purchase_id)); } catch { /* Keep the stored state when Razorpay is unreachable. */ }
       license = q.license.get(key);
     }
     return license;
@@ -127,15 +132,16 @@ function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now(
     const found = owned(key, email);
     if (!found) return null;
     const license = await current(found.key);
-    return { status: effectiveStatus(license), currency: license.currency, expires_at: iso(license.expires_at), renewal_cancelled: !!license.renewal_cancelled,
+    return { status: effectiveStatus(license), plan: license.plan, renews: license.plan === 'year' && !license.renewal_cancelled, currency: license.currency,
+      expires_at: iso(license.expires_at), renewal_cancelled: !!license.renewal_cancelled,
       activation_limit: license.activation_limit,
       instances: q.instances.all(license.key).map((i) => ({ id: i.id, name: i.name, created_at: iso(i.created_at) })) };
   }
   async function cancelRenewal(key, email) {
     const license = owned(key, email);
     if (!license) return null;
-    if (!license.renewal_cancelled) {
-      await razorpay.cancelAtCycleEnd(license.subscription_id);
+    if (license.plan === 'year' && !license.renewal_cancelled) {
+      await razorpay.cancelAtCycleEnd(license.purchase_id);
       q.cancelRenewal.run(license.key);
     }
     return account(key, email);
@@ -146,6 +152,6 @@ function createLicenses({ db, config, razorpay, now = () => Math.floor(Date.now(
     return q.revoke.run(now(), String(instanceId || ''), license.key).changes > 0;
   }
 
-  return { issue, sync, validate, activate, deactivate, account, cancelRenewal, release, licenseStatus, bySubscription: (id) => q.bySubscription.get(id) };
+  return { issue, issuePass, sync, validate, activate, deactivate, account, cancelRenewal, release, licenseStatus, byPurchase: (id) => q.byPurchase.get(id) };
 }
 module.exports = { createLicenses, newKey, licenseStatus, normalizeKey };

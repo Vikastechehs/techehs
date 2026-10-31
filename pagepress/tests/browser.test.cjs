@@ -18,7 +18,10 @@ async function main() {
   const captureFile = path.join(stage, 'capture.js'), captureSource = fs.readFileSync(captureFile, 'utf8');
   assert.ok(captureSource.includes('const CHUNK_CHARS = 8 * 1048576;'));
   fs.writeFileSync(captureFile, captureSource.replace('const CHUNK_CHARS = 8 * 1048576;', 'const CHUNK_CHARS = 64 * 1024;'));
-  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ razorpay: { serverUrl: 'https://licenses.pagepress.test', inrPriceLabel: '₹999/year' }, lemonsqueezy: { storeId: 11, productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$12/year' } }) + ');');
+  if (!unconfigured) fs.writeFileSync(path.join(stage, 'billing-config.js'), 'globalThis.PagePressBillingConfig = Object.freeze(' + JSON.stringify({ razorpay: { serverUrl: 'https://licenses.pagepress.test', prices: { INR: { week: '₹249/week', month: '₹449/month', year: '₹999/year' } } }, lemonsqueezy: { storeId: 11, plans: {
+    week: { productId: 44, variantId: 401, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/week-pass', priceLabel: '$2.99/week' },
+    month: { productId: 44, variantId: 402, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/month-pass', priceLabel: '$4.99/month' },
+    year: { productId: 22, variantId: 33, checkoutUrl: 'https://pagepress-test.lemonsqueezy.com/buy/test-product', priceLabel: '$12/year' } } } }) + ');');
   const { jsPDF } = require('jspdf');
   const realPdf = new jsPDF({ unit: 'pt', format: 'a4' });
   for (let n = 1; n <= 6; n++) {
@@ -135,26 +138,27 @@ async function main() {
     assert.equal(await ui.evaluate(async () => (await PagePressStore.getPages()).length), 0);
     assert.match(await ui.locator('#notice').textContent(), /up to 5 pages/);
     // The browser runs in New York time, so the universal price is shown in USD until the buyer switches currency.
-    assert.match(await ui.locator('#upgrade').textContent(), /Pay in USD · \$12\/year/);
-    assert.equal(await ui.locator('#upgrade-inr').isVisible(), false, 'Buyers outside India see only the USD price');
-    assert.equal(await ui.locator('#pro-price').textContent(), '$12/year');
-    await ui.locator('#switch-region').click();
-    assert.match(await ui.locator('#upgrade-inr').textContent(), /Pay in INR · ₹999\/year/);
+    assert.deepEqual(await ui.locator('#plan-options button').allTextContents(), ['1 week · $2.99/week', '1 month · $4.99/month', '1 year · $12/year · best value']);
     assert.equal(await ui.locator('#upgrade').isVisible(), false);
-    assert.equal(await ui.locator('#pro-price').textContent(), '₹999/year');
+    assert.equal(await ui.locator('#pro-price').textContent(), 'From $2.99/week');
+    await ui.locator('#switch-region').click();
+    assert.deepEqual(await ui.locator('#plan-options button').allTextContents(), ['1 week · ₹249/week', '1 month · ₹449/month', '1 year · ₹999/year · best value'], 'One currency at a time');
+    assert.equal(await ui.locator('#pro-price').textContent(), 'From ₹249/week');
     for (const width of [390, 320]) {
       await ui.setViewportSize({ width, height: 760 });
       assert.equal(await ui.evaluate(() => document.getElementById('plans-dialog').scrollWidth <= document.getElementById('plans-dialog').clientWidth), true);
       await ui.screenshot({ path: path.join(artifacts, `plans-free-${width}.png`) });
     }
     await ui.setViewportSize({ width: 1280, height: 940 });
-    const inrTabEvent = context.waitForEvent('page'); await ui.locator('#upgrade-inr').click();
-    const inrTab = await inrTabEvent; await inrTab.waitForURL('https://licenses.pagepress.test/buy?currency=INR');
+    const inrTabEvent = context.waitForEvent('page'); await ui.locator('#buy-inr-week').click();
+    const inrTab = await inrTabEvent; await inrTab.waitForURL('https://licenses.pagepress.test/buy?currency=INR&plan=week');
     await inrTab.close(); await ui.bringToFront();
     assert.equal(await ui.locator('#plan-name').textContent(), 'Free plan', 'Opening Razorpay checkout alone never unlocks Pro');
     await ui.locator('#switch-region').click();
-    assert.equal(await ui.locator('#upgrade').isVisible(), true);
-    const checkoutTabEvent = context.waitForEvent('page'); await ui.locator('#upgrade').click();
+    const monthTabEvent = context.waitForEvent('page'); await ui.locator('#buy-usd-month').click();
+    const monthTab = await monthTabEvent; await monthTab.waitForURL('https://pagepress-test.lemonsqueezy.com/buy/month-pass');
+    await monthTab.close(); await ui.bringToFront();
+    const checkoutTabEvent = context.waitForEvent('page'); await ui.locator('#buy-usd-year').click();
     const checkoutTab = await checkoutTabEvent; await checkoutTab.waitForURL('https://pagepress-test.lemonsqueezy.com/buy/test-product');
     await checkoutTab.close(); await ui.bringToFront();
     assert.equal(await ui.locator('#plan-name').textContent(), 'Free plan', 'Opening checkout alone never unlocks Pro');

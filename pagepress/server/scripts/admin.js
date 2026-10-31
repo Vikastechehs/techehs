@@ -8,7 +8,7 @@ if (command === 'find' && value) {
   if (!rows.length) console.log('No licenses for that email.');
   for (const l of rows) {
     const used = db.prepare('SELECT COUNT(*) AS n FROM instances WHERE license_key = ? AND revoked_at IS NULL').get(l.key).n;
-    console.log(`${l.key}  ${l.status}  ${l.currency}  expires ${date(l.expires_at)}  activations ${used}/${l.activation_limit}  subscription ${l.subscription_id}${l.renewal_cancelled ? '  renewal cancelled' : ''}`);
+    console.log(`${l.key}  ${l.status}  ${l.currency}  expires ${date(l.expires_at)}  activations ${used}/${l.activation_limit}  ${l.plan}  ${l.purchase_id}${l.renewal_cancelled ? '  renewal cancelled' : ''}`);
   }
 } else if (['disable', 'enable'].includes(command) && value) {
   const changes = db.prepare('UPDATE licenses SET status = ? WHERE key = ?').run(command === 'disable' ? 'disabled' : 'active', value.trim()).changes;

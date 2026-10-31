@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { verifyPaymentSignature, verifyWebhookSignature } = require('./razorpay');
+const { verifyPaymentSignature, verifyOrderSignature, verifyWebhookSignature } = require('./razorpay');
 const { createLicenses, normalizeKey } = require('./licenses');
 
 const PUBLIC = path.join(__dirname, '..', 'public');
@@ -31,9 +31,9 @@ function createApp({ config, db, razorpay, now }) {
   const perMinute = { license: 60, checkout: 10, manage: 20, ...config.rateLimits };
   const limits = { license: rateLimiter(perMinute.license), checkout: rateLimiter(perMinute.checkout), manage: rateLimiter(perMinute.manage) };
   const q = {
-    checkout: db.prepare('SELECT * FROM checkouts WHERE subscription_id = ?'),
-    addCheckout: db.prepare('INSERT INTO checkouts (subscription_id, email, currency, claim_hash, created_at) VALUES (?, ?, ?, ?, ?)'),
-    reject: db.prepare('UPDATE checkouts SET rejected = 1 WHERE subscription_id = ?'),
+    checkout: db.prepare('SELECT * FROM checkouts WHERE purchase_id = ?'),
+    addCheckout: db.prepare('INSERT INTO checkouts (purchase_id, plan, email, currency, claim_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)'),
+    reject: db.prepare('UPDATE checkouts SET rejected = 1 WHERE purchase_id = ?'),
     seenEvent: db.prepare('SELECT 1 FROM webhook_events WHERE id = ?'),
     recordEvent: db.prepare('INSERT OR IGNORE INTO webhook_events (id, received_at) VALUES (?, ?)')
   };
@@ -68,49 +68,80 @@ function createApp({ config, db, razorpay, now }) {
   }
   const clientIp = (req) => (config.trustProxy && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket.remoteAddress || 'unknown';
 
-  // Start a Razorpay subscription for the buyer's email; the claim token later proves this browser started it.
+  const PASS_NAMES = { week: '1 week', month: '1 month' };
+  // What a plan costs in a currency: the yearly Razorpay subscription plan, or a one-time pass amount.
+  async function offer(currency, planName) {
+    if (planName === 'year') {
+      const p = await plan(currency);
+      return p && { ...p, plan: 'year', recurring: true };
+    }
+    const pass = config.passes?.[planName];
+    const amount = pass?.amounts[currency];
+    return amount ? { plan: planName, recurring: false, currency, amount, days: pass.days, name: `PagePress Pro · ${PASS_NAMES[planName]}` } : null;
+  }
+  const planOf = (body) => (['week', 'month'].includes(body.plan) ? body.plan : 'year');
+  // Start a yearly subscription or a one-time pass order for the buyer's email; the claim token later proves
+  // that this browser started the checkout.
   async function startCheckout(body) {
-    const email = String(body.email || '').trim().toLowerCase(), currency = String(body.currency || 'INR').toUpperCase();
+    const email = String(body.email || '').trim().toLowerCase(), currency = String(body.currency || 'INR').toUpperCase(), planName = planOf(body);
     if (!EMAIL.test(email) || email.length > 254) return [400, { error: 'Enter a valid email address.' }];
-    const p = await plan(currency);
-    if (!p) return [400, { error: `Payments in ${currency} are not available.` }];
-    const subscription = await razorpay.createSubscription({
-      plan_id: p.id, total_count: config.totalCount, quantity: 1, customer_notify: 1,
-      notify_info: { notify_email: email }, notes: { product: 'pagepress-pro', email }
-    });
+    const o = await offer(currency, planName);
+    if (!o) return [400, { error: `This plan is not available in ${currency}.` }];
+    const notes = { product: 'pagepress-pro', plan: planName, email };
+    const purchase = o.recurring
+      ? await razorpay.createSubscription({ plan_id: o.id, total_count: config.totalCount, quantity: 1, customer_notify: 1, notify_info: { notify_email: email }, notes })
+      : await razorpay.createOrder({ amount: o.amount, currency, receipt: 'pp_' + crypto.randomBytes(9).toString('hex'), notes });
     const claim = crypto.randomBytes(32).toString('base64url');
-    q.addCheckout.run(subscription.id, email, currency, sha256(claim), Math.floor(Date.now() / 1000));
-    return [200, { key_id: config.keyId, subscription_id: subscription.id, claim_token: claim, email, name: config.sellerName,
-      description: `PagePress Pro · ${p.name}`, currency: p.currency, amount: p.amount }];
+    q.addCheckout.run(purchase.id, planName, email, currency, sha256(claim), Math.floor(Date.now() / 1000));
+    return [200, { key_id: config.keyId, [o.recurring ? 'subscription_id' : 'order_id']: purchase.id, purchase_id: purchase.id, plan: planName, claim_token: claim, email,
+      name: config.sellerName, description: o.recurring ? `PagePress Pro · ${o.name}` : o.name, currency: o.currency, amount: o.amount }];
   }
   const REGION_ERROR = 'The India price needs an Indian UPI, card or bank account. Your international card payment has been refunded; please buy the USD plan instead.';
   // Optional (INR_INDIAN_PAYMENTS_ONLY=1), for regional pricing where INR is cheaper than USD: an international card
-  // on the INR plan gets no license; the payment is refunded and the subscription cancelled. Off with a universal price.
+  // on an INR plan gets no license; the payment is refunded and any subscription cancelled. Off with a universal price.
   async function regionAllowed(checkout, currency, payment) {
     if (!config.inrIndianPaymentsOnly || currency !== 'INR' || !payment?.international) return true;
-    if (checkout) q.reject.run(checkout.subscription_id);
-    const subscriptionId = checkout?.subscription_id || payment.subscription_id;
-    for (const [step, action] of [['refund', () => razorpay.refundPayment(payment.id)], ['cancel', () => razorpay.cancelNow(subscriptionId)]]) {
+    if (checkout) q.reject.run(checkout.purchase_id);
+    const subscriptionId = checkout?.purchase_id?.startsWith('sub_') ? checkout.purchase_id : payment.subscription_id;
+    const steps = [['refund', () => razorpay.refundPayment(payment.id)], ...(subscriptionId ? [['cancel', () => razorpay.cancelNow(subscriptionId)]] : [])];
+    for (const [step, action] of steps) {
       try { await action(); } catch (error) { console.error(new Date().toISOString(), `Regional ${step} failed for ${payment.id}; handle it in the Razorpay dashboard.`, error.message); }
     }
     return false;
   }
+  // A pass is issued only for a payment of the exact order amount; an authorized payment is captured first.
+  async function issuePassFor(checkout, payment) {
+    const o = await offer(checkout.currency, checkout.plan);
+    if (!o || payment.order_id !== checkout.purchase_id || payment.amount !== o.amount || payment.currency !== checkout.currency) return null;
+    if (payment.status === 'authorized') payment = { ...payment, ...await razorpay.capturePayment(payment.id, payment.amount, payment.currency) };
+    if (payment.status !== 'captured') return null;
+    if (!await regionAllowed(checkout, checkout.currency, payment)) return false;
+    return licenses.issuePass({ orderId: checkout.purchase_id, plan: checkout.plan, days: o.days, email: checkout.email, currency: checkout.currency });
+  }
   // Return the license for a checkout this browser started. A valid payment signature issues it immediately;
   // without one (for example after closing the tab) the license appears once Razorpay's webhook arrives.
   async function claim(body) {
-    const checkout = q.checkout.get(String(body.subscription_id || ''));
+    const checkout = q.checkout.get(String(body.purchase_id || body.subscription_id || body.order_id || ''));
     if (!checkout || !body.claim_token || sha256(String(body.claim_token)) !== checkout.claim_hash) return [403, { error: 'This checkout could not be found.' }];
     if (checkout.rejected) return [403, { error: REGION_ERROR }];
-    let license = licenses.bySubscription(checkout.subscription_id);
+    let license = licenses.byPurchase(checkout.purchase_id);
     if (!license && body.razorpay_payment_id) {
-      if (body.razorpay_subscription_id !== checkout.subscription_id || !verifyPaymentSignature(config.keySecret, String(body.razorpay_payment_id), checkout.subscription_id, body.razorpay_signature)) {
-        return [400, { error: 'Payment verification failed. If you were charged, contact support with your payment ID.' }];
+      const paymentId = String(body.razorpay_payment_id), recurring = checkout.plan === 'year';
+      const signed = recurring
+        ? body.razorpay_subscription_id === checkout.purchase_id && verifyPaymentSignature(config.keySecret, paymentId, checkout.purchase_id, body.razorpay_signature)
+        : body.razorpay_order_id === checkout.purchase_id && verifyOrderSignature(config.keySecret, checkout.purchase_id, paymentId, body.razorpay_signature);
+      if (!signed) return [400, { error: 'Payment verification failed. If you were charged, contact support with your payment ID.' }];
+      const payment = await razorpay.getPayment(paymentId);
+      if (recurring) {
+        if (!await regionAllowed(checkout, checkout.currency, payment)) return [403, { error: REGION_ERROR }];
+        license = licenses.issue({ subscription: await razorpay.getSubscription(checkout.purchase_id), email: checkout.email, currency: checkout.currency });
+      } else {
+        license = await issuePassFor(checkout, payment);
+        if (license === false) return [403, { error: REGION_ERROR }];
       }
-      if (!await regionAllowed(checkout, checkout.currency, await razorpay.getPayment(String(body.razorpay_payment_id)))) return [403, { error: REGION_ERROR }];
-      license = licenses.issue({ subscription: await razorpay.getSubscription(checkout.subscription_id), email: checkout.email, currency: checkout.currency });
     }
     if (!license) return [202, { pending: true, error: 'Payment confirmation has not arrived yet. Try again in a minute.' }];
-    return [200, { license_key: license.key, email: license.email, expires_at: license.expires_at ? new Date(license.expires_at * 1000).toISOString() : null }];
+    return [200, { license_key: license.key, email: license.email, plan: license.plan, expires_at: license.expires_at ? new Date(license.expires_at * 1000).toISOString() : null }];
   }
   async function webhook(raw, headers) {
     if (!verifyWebhookSignature(config.webhookSecret, raw, headers['x-razorpay-signature'])) return [400, { error: 'Invalid signature.' }];
@@ -118,18 +149,24 @@ function createApp({ config, db, razorpay, now }) {
     if (eventId && q.seenEvent.get(eventId)) return [200, { ok: true, duplicate: true }];
     let event;
     try { event = JSON.parse(raw); } catch { return [400, { error: 'Invalid JSON.' }]; }
-    const subscription = event?.payload?.subscription?.entity;
-    if (!String(event?.event || '').startsWith('subscription.') || !subscription?.id) return [200, { ok: true, ignored: true }];
-    if (subscription.notes?.product && subscription.notes.product !== 'pagepress-pro') return [200, { ok: true, ignored: true }];
-    if (!licenses.bySubscription(subscription.id) && ['subscription.activated', 'subscription.charged'].includes(event.event)) {
-      const checkout = q.checkout.get(subscription.id);
-      const email = checkout?.email || subscription.notes?.email;
-      const currency = checkout?.currency || Object.keys(config.plans).find((c) => config.plans[c] === subscription.plan_id);
-      const payment = event.payload.payment?.entity;
-      // With the regional rule on, INR licenses wait for subscription.charged, which carries the payment to check.
-      const checkable = !config.inrIndianPaymentsOnly || currency !== 'INR' || payment;
-      if (email && currency && checkable && !checkout?.rejected && await regionAllowed(checkout, currency, payment)) licenses.issue({ subscription, email, currency });
-    } else licenses.sync(subscription);
+    const payment = event?.payload?.payment?.entity;
+    if (event?.event === 'order.paid') {
+      // One-time pass: only orders this server created (a checkout row exists) can issue a license.
+      const checkout = q.checkout.get(String(event.payload.order?.entity?.id || ''));
+      if (checkout && checkout.plan !== 'year' && !checkout.rejected && payment && !licenses.byPurchase(checkout.purchase_id)) await issuePassFor(checkout, payment);
+    } else {
+      const subscription = event?.payload?.subscription?.entity;
+      if (!String(event?.event || '').startsWith('subscription.') || !subscription?.id) return [200, { ok: true, ignored: true }];
+      if (subscription.notes?.product && subscription.notes.product !== 'pagepress-pro') return [200, { ok: true, ignored: true }];
+      if (!licenses.byPurchase(subscription.id) && ['subscription.activated', 'subscription.charged'].includes(event.event)) {
+        const checkout = q.checkout.get(subscription.id);
+        const email = checkout?.email || subscription.notes?.email;
+        const currency = checkout?.currency || Object.keys(config.plans).find((c) => config.plans[c] === subscription.plan_id);
+        // With the regional rule on, INR licenses wait for subscription.charged, which carries the payment to check.
+        const checkable = !config.inrIndianPaymentsOnly || currency !== 'INR' || payment;
+        if (email && currency && checkable && !checkout?.rejected && await regionAllowed(checkout, currency, payment)) licenses.issue({ subscription, email, currency });
+      } else licenses.sync(subscription);
+    }
     // Record the event only after processing, so a failed attempt is processed again on Razorpay's retry.
     if (eventId) q.recordEvent.run(eventId, Math.floor(Date.now() / 1000));
     return [200, { ok: true }];
@@ -145,9 +182,10 @@ function createApp({ config, db, razorpay, now }) {
       }
       if (req.method === 'GET' && url.pathname === '/healthz') return send(res, 200, { ok: true });
       if (req.method === 'GET' && url.pathname === '/api/offer') {
-        const p = await plan(String(url.searchParams.get('currency') || 'INR').toUpperCase());
-        return p ? send(res, 200, { currency: p.currency, amount: p.amount, name: p.name, period: p.period, interval: p.interval, supportEmail: config.supportEmail, indianPaymentsOnly: config.inrIndianPaymentsOnly && p.currency === 'INR' })
-          : send(res, 404, { error: 'This currency is not available.' });
+        const o = await offer(String(url.searchParams.get('currency') || 'INR').toUpperCase(), planOf({ plan: url.searchParams.get('plan') }));
+        return o ? send(res, 200, { plan: o.plan, recurring: o.recurring, currency: o.currency, amount: o.amount, name: o.name, period: o.period, interval: o.interval, days: o.days,
+          supportEmail: config.supportEmail, indianPaymentsOnly: config.inrIndianPaymentsOnly && o.currency === 'INR' })
+          : send(res, 404, { error: 'This plan is not available in this currency.' });
       }
       if (req.method !== 'POST') return send(res, 404, { error: 'Not found.' });
       const raw = await readBody(req);

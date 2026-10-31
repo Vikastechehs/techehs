@@ -6,10 +6,10 @@ Sells PagePress Pro through Razorpay subscriptions and issues and verifies licen
 
 | Route | Purpose |
 | --- | --- |
-| `GET /buy?currency=INR` (or `USD`) | Checkout page: email, Razorpay payment window, then shows the license key |
+| `GET /buy?currency=INR&plan=year` (`plan` = `week`, `month` or `year`; `currency` = `INR` or `USD`) | Checkout page: email, Razorpay payment window, then shows the license key |
 | `GET /manage` | Customer self-service: renewal status, release browsers, cancel renewal |
-| `POST /api/checkout`, `POST /api/checkout/claim` | Create a subscription; verify the payment signature and return the key |
-| `POST /api/razorpay/webhook` | Signed Razorpay subscription events: renewals, failures, cancellations |
+| `POST /api/checkout`, `POST /api/checkout/claim` | Create a yearly subscription or a one-time pass order; verify the payment signature and return the key |
+| `POST /api/razorpay/webhook` | Signed Razorpay events: `order.paid` for passes; subscription renewals, failures, cancellations |
 | `POST /v1/licenses/validate`, `/activate`, `/deactivate` | License API used by the extension (same response shape as Lemon Squeezy's) |
 | `GET /healthz` | Health check |
 
@@ -32,6 +32,8 @@ npm start
 | `RAZORPAY_WEBHOOK_SECRET` | yes | Secret entered when creating the Razorpay webhook |
 | `RAZORPAY_PLAN_ID_INR` | yes | Yearly INR plan ID |
 | `RAZORPAY_PLAN_ID_USD` | no | Yearly USD plan, only if Razorpay (not Lemon Squeezy) sells USD |
+| `PASS_WEEK_INR`, `PASS_MONTH_INR` | no | One-time 1-week (7 days) and 1-month (30 days) pass prices in **paise**, e.g. `24900` = ₹249. Omit to not sell that pass |
+| `PASS_WEEK_USD`, `PASS_MONTH_USD` | no | Same in cents, only if Razorpay sells USD |
 | `ACTIVATION_LIMIT` | no | Browsers per license, default 2 |
 | `INR_INDIAN_PAYMENTS_ONLY` | no | `1` refunds international cards on the INR plan. Only for regional pricing; leave off with the universal price |
 | `SUBSCRIPTION_TOTAL_COUNT` | no | Yearly renewals authorised in the mandate, default 10 |
@@ -57,7 +59,9 @@ node scripts/admin.js enable PP-XXXXX-XXXXX-XXXXX-XXXXX
 
 ## How access is decided
 
-- A key is issued only after a verified checkout signature (`HMAC-SHA256(payment_id|subscription_id)` with the key secret), or after a signed `subscription.activated`/`subscription.charged` webhook. That second path covers buyers who closed the tab; reopening `/buy` in the same browser shows their key.
+- **Passes (1 week, 1 month)** are Razorpay one-time orders. The key is issued only for a captured payment of the exact order amount and currency, verified by the order signature (`HMAC-SHA256(order_id|payment_id)`) or a signed `order.paid` webhook. An authorized-but-uncaptured payment is captured first. Access runs 7 or 30 days from issue and never renews; buying again gives a new key.
+
+- **Yearly plans:** a key is issued only after a verified checkout signature (`HMAC-SHA256(payment_id|subscription_id)` with the key secret), or after a signed `subscription.activated`/`subscription.charged` webhook. That second path covers buyers who closed the tab; reopening `/buy` in the same browser shows their key.
 - Access lasts until the subscription's `current_end`. Renewal webhooks extend it. If a renewal webhook is missed, the next license check after expiry re-reads the subscription from Razorpay (at most hourly), so paying customers are not cut off.
 - `pending` (renewal retrying) keeps the already-paid period. `halted`, `cancelled`, `completed` and `paused` end access. Cancelling on `/manage` stops renewal at the end of the paid period.
 - Activations are counted per license; parallel activations cannot exceed the limit.

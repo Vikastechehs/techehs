@@ -1,0 +1,16 @@
+{
+  "razorpay": {
+    "serverUrl": "https://licenses.yourdomain.com",
+    "prices": {
+      "INR": { "week": "₹249/week", "month": "₹449/month", "year": "₹999/year" }
+    }
+  },
+  "lemonsqueezy": {
+    "storeId": 12345,
+    "plans": {
+      "week": { "productId": 111, "variantId": 1001, "checkoutUrl": "https://YOUR-STORE.lemonsqueezy.com/buy/WEEK-VARIANT-UUID", "priceLabel": "$2.99/week" },
+      "month": { "productId": 111, "variantId": 1002, "checkoutUrl": "https://YOUR-STORE.lemonsqueezy.com/buy/MONTH-VARIANT-UUID", "priceLabel": "$4.99/month" },
+      "year": { "productId": 222, "variantId": 2001, "checkoutUrl": "https://YOUR-STORE.lemonsqueezy.com/buy/YEAR-VARIANT-UUID", "priceLabel": "$12/year" }
+    }
+  }
+}

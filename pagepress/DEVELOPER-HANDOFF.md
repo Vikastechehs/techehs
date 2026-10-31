@@ -1,6 +1,6 @@
 # PagePress developer handoff
 
-This is the complete editable source for PagePress v0.4.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
+This is the complete editable source for PagePress v0.5.0, not just the installable extension. The developer brief PDF is included as `pagepress-developer-brief.pdf`. v0.3.1 reviews and extends the v0.3.0 prototype; see "Changes in 0.3.1" below and `TEST-RESULTS.md`.
 
 ## Start here
 
@@ -65,6 +65,9 @@ The owner has selected Lemon Squeezy but still needs to create/activate the merc
 Return updated source, an installable extension ZIP, installation notes, test evidence, accurate viewer-support limitations, and updated privacy/billing disclosures. Keep document captures local. Do not promise compatibility with every website or original PDF signature/searchable-text preservation.
 
 ## Pricing model
+
+Pro is sold as a 1-week pass (₹249 / US$2.99), a 1-month pass (₹449 / US$4.99) or a yearly plan (₹999 / US$12). Passes are one-time payments that expire and never renew: Razorpay orders issued by the license server, or Lemon Squeezy single-payment variants with 7/30-day license keys. Store settings come from a JSON file (`scripts/billing.example.json`) applied with `scripts/configure-billing.cjs`.
+
 
 One universal price worldwide, shown in the buyer's currency: ₹999/year in India and US$12/year elsewhere. The panel shows only the price for the browser's region (INR for Indian time, USD otherwise), with a link to switch currency. Change prices in the Razorpay plan, the Lemon Squeezy variant and `scripts/configure-billing.cjs` labels together. If INR is ever made cheaper than USD, enable `INR_INDIAN_PAYMENTS_ONLY=1` on the server (see `BILLING-SETUP.md`).
 

@@ -8,14 +8,19 @@ const { openDatabase } = require('../src/db');
 const { createApp } = require('../src/app');
 const { hmac } = require('../src/razorpay');
 
-const config = { keyId: 'rzp_test_public', keySecret: 'test_key_secret', webhookSecret: 'w', plans: { INR: 'plan_inr' }, activationLimit: 2, totalCount: 10, sellerName: 'PagePress', supportEmail: 'help@example.com' };
+const config = { keyId: 'rzp_test_public', keySecret: 'test_key_secret', webhookSecret: 'w', plans: { INR: 'plan_inr' }, passes: { week: { days: 7, amounts: { INR: 24900 } } }, activationLimit: 2, totalCount: 10, sellerName: 'PagePress', supportEmail: 'help@example.com' };
 const subscriptions = new Map();
 const razorpay = {
   async getPlan() { return { period: 'yearly', interval: 1, item: { name: 'PagePress Pro yearly', amount: 79900, currency: 'INR' } }; },
   async createSubscription(body) { const id = 'sub_page_' + (subscriptions.size + 1); subscriptions.set(id, { id, plan_id: body.plan_id, status: 'created', notes: body.notes }); return { id, status: 'created' }; },
   async getSubscription(id) { return { ...subscriptions.get(id) }; },
   async cancelAtCycleEnd(id) { return { ...subscriptions.get(id) }; },
-  async getPayment(id) { return { id, international: false, method: 'upi' }; }
+  orders: new Map(),
+  async createOrder(body) { const id = 'order_page_' + (this.orders.size + 1); this.orders.set(id, { id, ...body }); return { id, ...body }; },
+  async getPayment(id) {
+    const order = this.orders.get(id.replace(/^pay_/, ''));
+    return order ? { id, order_id: order.id, amount: order.amount, currency: order.currency, status: 'captured', international: false } : { id, international: false, method: 'upi' };
+  }
 };
 
 async function main() {
@@ -34,11 +39,18 @@ async function main() {
       const paymentId = 'pay_' + subscriptionId;
       return { razorpay_payment_id: paymentId, razorpay_subscription_id: subscriptionId, razorpay_signature: hmac(config.keySecret, `${paymentId}|${subscriptionId}`) };
     });
+    await page.exposeFunction('stubRazorpayPayOrder', (orderId) => {
+      const paymentId = 'pay_' + orderId;
+      return { razorpay_payment_id: paymentId, razorpay_order_id: orderId, razorpay_signature: hmac(config.keySecret, `${orderId}|${paymentId}`) };
+    });
     let opened = null;
     await page.route('https://checkout.razorpay.com/v1/checkout.js', (route) => route.fulfill({ contentType: 'text/javascript', body: `
       window.Razorpay = function (options) { this.options = options; };
       window.Razorpay.prototype.on = function () {};
-      window.Razorpay.prototype.open = async function () { window.__opened = this.options; this.options.handler(await window.stubRazorpayPay(this.options.subscription_id)); };` }));
+      window.Razorpay.prototype.open = async function () {
+        window.__opened = this.options;
+        this.options.handler(this.options.order_id ? await window.stubRazorpayPayOrder(this.options.order_id) : await window.stubRazorpayPay(this.options.subscription_id));
+      };` }));
     await page.goto(base + 'buy?currency=INR');
     await page.waitForFunction(() => document.getElementById('price').textContent.includes('799'));
     assert.match(await page.locator('#price').textContent(), /₹799\s*\/\s*year/);
@@ -60,6 +72,27 @@ async function main() {
     await page.locator('#done').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#key').textContent(), key);
 
+    // A 1-week pass is a one-time order: no renewal wording, Razorpay opened with order_id and amount.
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(base + 'buy?currency=INR&plan=week');
+    await page.waitForFunction(() => document.getElementById('price').textContent.includes('249'));
+    assert.match(await page.locator('#price').textContent(), /₹249 · 7 days/);
+    assert.match(await page.locator('#renewal').textContent(), /does not renew/);
+    assert.match(await page.locator('#other-plans').textContent(), /1 month · 1 year/);
+    await page.locator('#email').fill('weekly@example.com');
+    await page.locator('#pay').click();
+    await page.locator('#done').waitFor({ state: 'visible', timeout: 10000 });
+    const weekOpened = await page.evaluate(() => window.__opened);
+    assert.match(weekOpened.order_id, /^order_page_/); assert.equal(weekOpened.amount, 24900); assert.equal(weekOpened.subscription_id, undefined);
+    const weekKey = await page.locator('#key').textContent();
+    await page.goto(base + 'manage');
+    await page.locator('#email').fill('weekly@example.com'); await page.locator('#key').fill(weekKey);
+    await page.locator('#form button').click();
+    await page.locator('#account').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#status').textContent(), /1-week pass/);
+    assert.match(await page.locator('#period').textContent(), /do not renew/);
+    assert.equal(await page.locator('#cancel').isVisible(), false);
+
     // Self-service: wrong email is refused; the right one shows renewal and allows cancelling.
     await page.goto(base + 'manage');
     await page.locator('#email').fill('someone@example.com'); await page.locator('#key').fill(key);
@@ -74,7 +107,7 @@ async function main() {
     await page.waitForFunction(() => document.getElementById('period').textContent.includes('Renewal cancelled'));
     assert.equal(await page.locator('#cancel').isVisible(), false);
     assert.deepEqual(errors, []);
-    console.log('PASS: /buy shows the INR plan, completes a stubbed Razorpay payment, displays and recovers the key; /manage checks email and cancels renewal.');
+    console.log('PASS: /buy sells the yearly plan and a 1-week pass with a stubbed Razorpay, displays and recovers keys; /manage shows the pass (no renewal), checks email and cancels yearly renewal.');
   } finally { await browser.close(); server.close(); db.close(); }
 }
 main().catch((error) => { console.error(error); process.exit(1); });

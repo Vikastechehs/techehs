@@ -9,6 +9,10 @@ function safeEqual(expected, received) {
 function verifyPaymentSignature(secret, paymentId, subscriptionId, signature) {
   return safeEqual(hmac(secret, `${paymentId}|${subscriptionId}`), signature);
 }
+// Checkout handler signature for one-time orders: HMAC-SHA256(order_id + "|" + payment_id, key_secret).
+function verifyOrderSignature(secret, orderId, paymentId, signature) {
+  return safeEqual(hmac(secret, `${orderId}|${paymentId}`), signature);
+}
 // Webhooks: HMAC-SHA256 of the raw request body with the webhook secret, in X-Razorpay-Signature.
 function verifyWebhookSignature(secret, rawBody, signature) {
   return safeEqual(hmac(secret, rawBody), signature);
@@ -39,8 +43,10 @@ function createRazorpay({ keyId, keySecret, fetcher = fetch, baseUrl = 'https://
     getSubscription: (id) => call('GET', `subscriptions/${encodeURIComponent(id)}`),
     cancelAtCycleEnd: (id) => call('POST', `subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: 1 }),
     cancelNow: (id) => call('POST', `subscriptions/${encodeURIComponent(id)}/cancel`, { cancel_at_cycle_end: 0 }),
+    createOrder: (body) => call('POST', 'orders', body),
+    capturePayment: (id, amount, currency) => call('POST', `payments/${encodeURIComponent(id)}/capture`, { amount, currency }),
     getPayment: (id) => call('GET', `payments/${encodeURIComponent(id)}`),
     refundPayment: (id) => call('POST', `payments/${encodeURIComponent(id)}/refund`, {})
   };
 }
-module.exports = { createRazorpay, verifyPaymentSignature, verifyWebhookSignature, hmac };
+module.exports = { createRazorpay, verifyPaymentSignature, verifyOrderSignature, verifyWebhookSignature, hmac };

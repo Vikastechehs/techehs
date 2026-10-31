@@ -9,7 +9,7 @@ const { createClient } = require('../../extension/licensing.js');
 
 const config = {
   publicUrl: 'http://127.0.0.1/', trustProxy: false, keyId: 'rzp_test_public', keySecret: 'test_key_secret', webhookSecret: 'test_webhook_secret',
-  plans: { INR: 'plan_inr', USD: 'plan_usd' }, activationLimit: 2, totalCount: 10, sellerName: 'PagePress', supportEmail: 'help@example.com',
+  plans: { INR: 'plan_inr', USD: 'plan_usd' }, passes: { week: { days: 7, amounts: { INR: 19900, USD: 249 } }, month: { days: 30, amounts: { INR: 39900 } } }, activationLimit: 2, totalCount: 10, sellerName: 'PagePress', supportEmail: 'help@example.com',
   rateLimits: { license: 1000, checkout: 1000, manage: 1000 }, inrIndianPaymentsOnly: true
 };
 let clock = 1_800_000_000;
@@ -28,7 +28,9 @@ const fake = {
   },
   async getSubscription(id) { if (this.failGet) throw new Error('down'); return { ...this.subscriptions.get(id) }; },
   async cancelAtCycleEnd(id) { this.cancelled.push(id); return { ...this.subscriptions.get(id) }; },
-  payments: new Map(), refunds: [], cancelledNow: [],
+  payments: new Map(), refunds: [], cancelledNow: [], orders: new Map(), captured: [],
+  async createOrder(body) { const order = { id: `order_${this.next++}`, ...body, status: 'created' }; this.orders.set(order.id, order); return { ...order }; },
+  async capturePayment(id, amount, currency) { this.captured.push(id); Object.assign(this.payments.get(id), { status: 'captured' }); return { ...this.payments.get(id), amount, currency }; },
   async getPayment(id) { return { ...this.payments.get(id) }; },
   async refundPayment(id) { this.refunds.push(id); return { id: 'rfnd_' + id }; },
   async cancelNow(id) { this.cancelledNow.push(id); Object.assign(this.subscriptions.get(id), { status: 'cancelled' }); return { ...this.subscriptions.get(id) }; }
@@ -73,6 +75,8 @@ test('configuration requires secrets from the environment and HTTPS public URL',
   assert.deepEqual(loadConfig(env).plans, { INR: 'plan_inr' });
   assert.throws(() => loadConfig({ ...env, RAZORPAY_KEY_SECRET: '' }), /RAZORPAY_KEY_SECRET/);
   assert.throws(() => loadConfig({ ...env, PUBLIC_URL: 'http://licenses.example.com' }), /HTTPS/);
+  assert.deepEqual(loadConfig({ ...env, PASS_WEEK_INR: '19900', PASS_MONTH_USD: '499' }).passes, { week: { days: 7, amounts: { INR: 19900 } }, month: { days: 30, amounts: { USD: 499 } } });
+  assert.throws(() => loadConfig({ ...env, PASS_WEEK_INR: '199.00' }), /paise\/cents/);
 });
 
 test('offer and checkout use the plan for the requested currency', async () => {
@@ -106,7 +110,7 @@ test('verified payment issues one license; claiming again returns the same key',
   assert.equal((await license('validate', { license_key: typed })).data.license_key.key, bought.key, 'Lowercase and 0/1 look-alikes are accepted');
   const valid = await license('validate', { license_key: bought.key });
   assert.equal(valid.data.valid, true);
-  assert.deepEqual(valid.data.meta, { store: 'pagepress', product: 'pagepress-pro', provider: 'razorpay', currency: 'INR', customer_email: 'owner@example.com' });
+  assert.deepEqual(valid.data.meta, { store: 'pagepress', product: 'pagepress-pro', provider: 'razorpay', plan: 'year', currency: 'INR', customer_email: 'owner@example.com' });
   assert.equal(valid.data.license_key.expires_at, new Date((clock + 365 * DAY) * 1000).toISOString());
 });
 
@@ -194,11 +198,18 @@ test('the PagePress extension client activates, verifies and deactivates against
   assert.equal(active.plan, 'pro'); assert.equal(active.provider, 'razorpay');
   assert.equal((await client.refresh()).plan, 'pro');
   assert.equal((await client.authorize(150)).allowed, true);
-  assert.equal(client.checkout('INR'), base + 'buy?currency=INR');
+  assert.equal(client.checkout('INR'), base + 'buy?currency=INR&plan=year');
   assert.equal(await client.portal(), base + 'manage');
   assert.ok(origins.every((o) => o === new URL(base).origin + '/*'));
   assert.equal((await client.deactivate()).plan, 'free');
   assert.equal(values.pagepressLicense, undefined);
+
+  // A 1-week pass bought on this server activates in the extension as a week plan.
+  const start = (await post('api/checkout', { email: 'extension@example.com', currency: 'INR', plan: 'week' })).data;
+  const pass = await post('api/checkout/claim', { purchase_id: start.order_id, claim_token: start.claim_token, ...payOrder(start.order_id) });
+  const weekly = await client.activate(pass.data.license_key, 'extension@example.com');
+  assert.deepEqual([weekly.plan, weekly.licensePlan], ['pro', 'week']);
+  assert.equal((await client.refresh()).licensePlan, 'week');
 });
 
 test('license and checkout endpoints are rate limited per client', async () => {
@@ -250,4 +261,61 @@ test('with a universal price (default), international cards can buy the INR plan
     assert.equal(claimed.status, 200); assert.equal(fake.refunds.length, refunds);
     assert.equal((await (await fetch(url + 'api/offer?currency=INR')).json()).indianPaymentsOnly, false);
   } finally { open.close(); openDb.close(); }
+});
+
+function payOrder(orderId, { amount, currency, status = 'captured', international = false } = {}) {
+  const order = fake.orders.get(orderId), paymentId = `pay_${orderId}`;
+  fake.payments.set(paymentId, { id: paymentId, order_id: orderId, amount: amount ?? order.amount, currency: currency ?? order.currency, status, international, method: 'upi' });
+  return { razorpay_payment_id: paymentId, razorpay_order_id: orderId, razorpay_signature: hmac(config.keySecret, `${orderId}|${paymentId}`) };
+}
+
+test('1-week and 1-month passes: offers, one-time order, 7/30-day expiry, no renewal', async () => {
+  const week = await (await fetch(base + 'api/offer?currency=INR&plan=week')).json();
+  assert.deepEqual([week.plan, week.recurring, week.amount, week.days], ['week', false, 19900, 7]);
+  assert.equal((await fetch(base + 'api/offer?currency=USD&plan=month')).status, 404, 'A pass without a configured amount is not sold');
+
+  const start = (await post('api/checkout', { email: 'weekly@example.com', currency: 'INR', plan: 'week' })).data;
+  assert.match(start.order_id, /^order_/); assert.equal(start.subscription_id, undefined);
+  assert.equal(fake.orders.get(start.order_id).amount, 19900);
+  assert.equal(fake.orders.get(start.order_id).notes.plan, 'week');
+  const forged = { ...payOrder(start.order_id), razorpay_signature: hmac(config.keySecret, `${start.order_id}|pay_other`) };
+  assert.equal((await post('api/checkout/claim', { purchase_id: start.order_id, claim_token: start.claim_token, ...forged })).status, 400);
+  const claimed = await post('api/checkout/claim', { purchase_id: start.order_id, claim_token: start.claim_token, ...payOrder(start.order_id) });
+  assert.equal(claimed.status, 200); assert.equal(claimed.data.plan, 'week');
+  assert.equal(claimed.data.expires_at, new Date((clock + 7 * DAY) * 1000).toISOString());
+  const key = claimed.data.license_key;
+  const valid = await license('validate', { license_key: key });
+  assert.equal(valid.data.valid, true); assert.equal(valid.data.meta.plan, 'week');
+  const account = await post('api/manage/status', { license_key: key, email: 'weekly@example.com' });
+  assert.deepEqual([account.data.plan, account.data.renews], ['week', false]);
+  await post('api/manage/cancel', { license_key: key, email: 'weekly@example.com' });
+  assert.ok(!fake.cancelled.includes(start.order_id), 'Passes have no renewal to cancel');
+  clock += 8 * DAY;
+  const ended = await license('validate', { license_key: key });
+  assert.equal(ended.data.valid, false); assert.equal(ended.data.license_key.status, 'expired');
+
+  // Month pass in INR with an authorized (not yet captured) payment: captured, then 30 days.
+  const month = (await post('api/checkout', { email: 'monthly@example.com', currency: 'INR', plan: 'month' })).data;
+  const paid = payOrder(month.order_id, { status: 'authorized' });
+  const monthly = await post('api/checkout/claim', { purchase_id: month.order_id, claim_token: month.claim_token, ...paid });
+  assert.equal(monthly.status, 200); assert.ok(fake.captured.includes(paid.razorpay_payment_id));
+  assert.equal(monthly.data.expires_at, new Date((clock + 30 * DAY) * 1000).toISOString());
+});
+
+test('passes require the exact order amount and are issued by order.paid when the tab was closed', async () => {
+  const short = (await post('api/checkout', { email: 'short@example.com', currency: 'USD', plan: 'week' })).data;
+  const underpaid = await post('api/checkout/claim', { purchase_id: short.order_id, claim_token: short.claim_token, ...payOrder(short.order_id, { amount: 100 }) });
+  assert.equal(underpaid.status, 202, 'A payment for the wrong amount issues nothing');
+
+  const closed = (await post('api/checkout', { email: 'closed@example.com', currency: 'USD', plan: 'week' })).data;
+  payOrder(closed.order_id);
+  const raw = JSON.stringify({ event: 'order.paid', payload: { order: { entity: fake.orders.get(closed.order_id) }, payment: { entity: fake.payments.get(`pay_${closed.order_id}`) } } });
+  assert.equal((await post('api/razorpay/webhook', null, { raw, headers: { 'X-Razorpay-Signature': hmac(config.webhookSecret, raw), 'X-Razorpay-Event-Id': 'evt_order_1' } })).status, 200);
+  const claimed = await post('api/checkout/claim', { purchase_id: closed.order_id, claim_token: closed.claim_token });
+  assert.equal(claimed.status, 200); assert.equal(claimed.data.plan, 'week');
+
+  // Orders this server did not create never issue licenses.
+  const foreign = JSON.stringify({ event: 'order.paid', payload: { order: { entity: { id: 'order_elsewhere' } }, payment: { entity: { id: 'pay_x', order_id: 'order_elsewhere', amount: 249, currency: 'USD', status: 'captured' } } } });
+  await post('api/razorpay/webhook', null, { raw: foreign, headers: { 'X-Razorpay-Signature': hmac(config.webhookSecret, foreign), 'X-Razorpay-Event-Id': 'evt_order_2' } });
+  assert.equal((await license('validate', { license_key: 'PP-AAAAA-AAAAA-AAAAA-AAAAA' })).status, 404);
 });

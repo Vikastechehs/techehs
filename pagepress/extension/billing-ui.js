@@ -2,6 +2,7 @@
   const $ = (id) => document.getElementById(id);
   let status = { plan: 'free', pageLimit: 5, configured: false, hasLicense: false, offers: [] }, pending = false, captureBusy = false;
   const enabled = typeof chrome !== 'undefined' && !!chrome.runtime?.id;
+  const PLAN_NAMES = { week: '1 week', month: '1 month', year: '1 year' };
   const licensing = enabled ? PagePressLicensing.createClient({
     config: PagePressBillingConfig, storage: PagePressLicenseStore,
     hasPermission: (origin) => chrome.permissions.contains({ origins: [origin] })
@@ -16,7 +17,7 @@
       case 'activate': return licensing.activate(args.key, args.email);
       case 'deactivate': return licensing.deactivate();
       case 'authorize': return licensing.authorize(args.count);
-      case 'checkout': await chrome.tabs.create({ url: licensing.checkout(args.currency) }); return { opened: true };
+      case 'checkout': await chrome.tabs.create({ url: licensing.checkout(args.currency, args.plan) }); return { opened: true };
       case 'portal': await chrome.tabs.create({ url: await licensing.portal() }); return { opened: true };
       default: throw new Error('Unknown license action.');
     }
@@ -28,27 +29,32 @@
   }
   function render() {
     const pro = status.plan === 'pro', locked = pending || captureBusy;
-    const offer = (currency) => (status.offers || []).find((o) => o.currency === currency);
-    $('plan-name').textContent = pro ? 'Pro plan' : 'Free plan';
+    const all = status.offers || [];
+    const currency = all.some((o) => o.currency === region) ? region : all[0]?.currency;
+    const shown = all.filter((o) => o.currency === currency), other = all.find((o) => o.currency !== currency);
+    $('plan-name').textContent = pro ? `Pro plan${status.licensePlan && status.licensePlan !== 'year' ? ` · ${PLAN_NAMES[status.licensePlan]} pass` : ''}` : 'Free plan';
     $('plan-summary').textContent = `Up to ${status.pageLimit} pages per capture. PDF and JPEG included.`;
-    const chosen = offer(region) || (status.offers || [])[0], other = (status.offers || []).find((o) => o !== chosen);
-    $('pro-price').textContent = chosen?.priceLabel || '$12/year';
-    for (const [id, currency, label] of [['upgrade-inr', 'INR', 'Pay in INR'], ['upgrade', 'USD', 'Pay in USD']]) {
-      const item = offer(currency), button = $(id);
-      // Unconfigured builds keep one disabled "Upgrade to Pro" button.
-      button.hidden = chosen ? chosen.currency !== currency : currency === 'INR';
-      button.disabled = locked || !item || pro;
-      button.textContent = pro ? 'Pro is active' : item ? `${label} · ${item.priceLabel}` : 'Upgrade to Pro';
-    }
+    $('pro-price').textContent = shown.length > 1 ? `From ${shown[0].priceLabel}` : shown[0]?.priceLabel || '$12/year';
+    // One button per plan in the buyer's currency; unconfigured builds keep one disabled "Upgrade to Pro" button.
+    $('upgrade').hidden = shown.length > 0;
+    $('upgrade').disabled = true;
+    $('plan-options').replaceChildren(...shown.map((o) => {
+      const button = document.createElement('button');
+      button.id = `buy-${o.currency.toLowerCase()}-${o.plan}`; button.className = o.plan === 'year' ? 'primary' : '';
+      button.dataset.currency = o.currency; button.dataset.plan = o.plan; button.type = 'button';
+      button.disabled = locked || pro;
+      button.textContent = pro ? 'Pro is active' : `${PLAN_NAMES[o.plan]} · ${o.priceLabel}${o.plan === 'year' && shown.length > 1 ? ' · best value' : ''}`;
+      return button;
+    }));
     $('switch-region').hidden = !other || pro;
     $('switch-region').disabled = locked;
-    $('switch-region').textContent = other?.currency === 'INR' ? 'Paying from India? Pay in INR' : 'Paying from outside India? Pay in USD';
+    $('switch-region').textContent = other?.currency === 'INR' ? 'Paying from India? See prices in INR' : 'Paying from outside India? See prices in USD';
     $('activate-license').disabled = locked || !status.configured;
     $('license-email').disabled = locked; $('license-key').disabled = locked;
     $('license-form').hidden = status.hasLicense;
     $('license-details').hidden = !status.hasLicense;
     for (const id of ['refresh-license', 'manage-billing', 'deactivate-license']) $(id).disabled = locked || !status.configured;
-    $('license-summary').textContent = status.hasLicense ? `License ending ${status.keySuffix}${status.expiresAt ? ' · Expires ' + new Date(status.expiresAt).toLocaleDateString() : ''}.` : '';
+    $('license-summary').textContent = status.hasLicense ? `${status.licensePlan ? PLAN_NAMES[status.licensePlan] + (status.licensePlan === 'year' ? ' plan' : ' pass') + ' · ' : ''}License ending ${status.keySuffix}${status.expiresAt ? ' · Expires ' + new Date(status.expiresAt).toLocaleDateString() : ''}.` : '';
     $('billing-status').textContent = pending ? 'Checking your license...' : status.error || (!status.configured ? 'Pro purchases are not available yet. Free captures are ready to use.' : pro ? 'Pro is active in this browser.' : 'Use Free or upgrade for longer documents. After purchase, return here to activate your license.');
   }
   async function run(action, args) {
@@ -64,8 +70,10 @@
   }
   $('plans-open').addEventListener('click', () => $('plans-dialog').showModal());
   $('plans-close').addEventListener('click', () => $('plans-dialog').close());
-  $('upgrade').addEventListener('click', () => run('checkout', { currency: 'USD' }));
-  $('upgrade-inr').addEventListener('click', () => run('checkout', { currency: 'INR' }));
+  $('plan-options').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-plan]');
+    if (button) run('checkout', { currency: button.dataset.currency, plan: button.dataset.plan });
+  });
   $('switch-region').addEventListener('click', () => { region = region === 'INR' ? 'USD' : 'INR'; render(); });
   $('manage-billing').addEventListener('click', () => run('portal'));
   $('refresh-license').addEventListener('click', async () => {
