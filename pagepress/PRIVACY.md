@@ -1,6 +1,6 @@
 # PagePress Privacy Notice
 
-PagePress version 0.8.0 captures and converts documents locally in your browser. It does not operate a document-upload server or transmit document captures to its developer.
+PagePress version 0.9.0 captures and converts documents locally in your browser. It does not operate a document-upload server or transmit document captures to its developer.
 
 When you invoke PagePress on a website document viewer, it reads the displayed page count and controls, changes the viewer page/zoom as needed, and copies rendered document pixels and supported visible page layers. It saves captured images and capture settings, including source title and URL, in local extension storage so an interrupted capture can be retried. It exports those images as a PDF, individual JPEGs, or a ZIP of JPEGs through Chrome's Downloads API. All conversion and ZIP assembly happen locally.
 
