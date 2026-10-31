@@ -1,0 +1,49 @@
+FARESIGHT (working name) - PROJECT PACK
+Updated 31 Oct 2026
+
+WHAT IT IS
+A free flight-deal site and app. We only show return fares that are bookable now and at
+least 25% below the route's real normal price, re-checked every 6 hours. It launches from
+India first, then other countries. It earns from booking commissions (never shown on the site).
+Hotels come later.
+
+WHERE WE ARE
+- Research and competitor audit: done (only 26 of 90 rival deals were real and bookable)
+- Flight engine: built; real-fare test passed (48 of 50 live searches, 480 credits)
+- Website design: done, flights only (home, deal, route, alerts, mobile home, mobile deal)
+- Name, domain, company, affiliate accounts: not done yet
+- Target: soft launch Wed 4 Nov 2026 to 50-100 people
+
+WE LAUNCH WITH 5 SERVICES
+1. Verified flight deals (25%+ below normal, re-checked every 6 hours, mistake-fare label)
+2. City alerts on Telegram and WhatsApp channel
+3. Every working date, with a price calendar
+4. Explore from your airport, by budget or region
+5. Honest deal endings (ended deals stay up with the reason)
+Weeks 2-4: route guides, "Is this a good price?" checker, route watch, email alerts, Android app.
+
+WHAT'S IN THIS FOLDER
+1-blueprint\Faresight-Blueprint.pdf
+    The full plan: launch plan, product, revenue, roadmap, growth, budget, risks,
+    website and app research, protection from scrapers.
+2-website-design\
+    clickable-preview\index.html  -> open in a browser; pages link to each other
+    screenshots\                   -> one image per page
+    Faresight-website-design.pdf   -> all pages in one PDF
+3-flight-deal-engine\
+    The working engine (Windows). Needs Node.js 22.18 or newer.
+    1. setup.bat      installs it and creates the database
+    2. test-real.bat  50 real searches (about 500 Scrape.do credits)
+    3. start.bat      runs everything; website at http://localhost:3000, admin at /admin
+    4. status.bat     shows prices stored, deals and credits used
+    Put your Scrape.do key in .env (created by setup.bat). Never share .env.
+
+NAME SHORTLIST (all .com free when checked on 29 Oct)
+Musk style:    Warproam, Orionroam, Polarisroam, Quasartrip
+Zomunk style:  Yatrox, Roamek, Jetbuk, Nomvok
+Calm/global:   Tabibird, Yonderkite, Roamfinch
+
+LIVE ONLINE VERSIONS (open while signed in to Claude)
+Blueprint:        https://claude.ai/artifact/PkdwnJm96ssm535ua1Gx8k
+Build spec:       https://claude.ai/artifact/R4Jegzg2hQ6nAUtSjdCxWK
+Competitor audit: https://claude.ai/artifact/HU3i5i9puNggVSYL2zHUu2

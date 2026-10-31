@@ -1,0 +1,30 @@
+{
+  "name": "flight-deal-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Finds flight fares that are bookable now and genuinely below the route's normal price.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "setup": "node src/cli.ts setup",
+    "status": "node src/cli.ts status",
+    "sweep-once": "node src/cli.ts sweep-once",
+    "demo": "node src/cli.ts demo",
+    "test": "node --test test/engine.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.12",
+    "pg": "^8.23.1",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/web-push": "^3.6.4",
+    "typescript": "^5.9.0"
+  }
+}
