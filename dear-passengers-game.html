@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dear Passengers</title>
+<meta name="description" content="Dear Passengers – a passenger safety game by TECH EHS Shield. Spot hazards, answer safety questions and buckle up every passenger.">
+<style>
+:root {
+  --brand: #3a5a78;
+  --brand-ink: #ffffff;
+  --teal: #2cb3a5;
+  --red: #e83b3b;
+  --gold: #f5b301;
+  --bg: #f5f7fa;
+  --card: #ffffff;
+  --text: #2b2f36;
+  --muted: #5f6670;
+  --border: #dde2e8;
+  --tile: #f5f7fa;
+  --good-bg: #e3f7f4;
+  --bad-bg: #fde8e8;
+  --shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand: #4f7aa1; --bg: #12161c; --card: #1c222b; --text: #e8ecf1; --muted: #a8b1bc;
+    --border: #2e3743; --tile: #242c37; --good-bg: #133d38; --bad-bg: #4a1f22; --shadow: 0 2px 10px rgba(0,0,0,0.4);
+  }
+}
+:root[data-theme="dark"] {
+  --brand: #4f7aa1; --bg: #12161c; --card: #1c222b; --text: #e8ecf1; --muted: #a8b1bc;
+  --border: #2e3743; --tile: #242c37; --good-bg: #133d38; --bad-bg: #4a1f22; --shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); }
+body {
+  font-family: Arial, Helvetica, sans-serif; color: var(--text); line-height: 1.5;
+  min-height: 100vh; display: flex; flex-direction: column;
+  -webkit-tap-highlight-color: transparent;
+}
+header.top {
+  background: var(--brand); color: var(--brand-ink); padding: 12px 16px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.logo { font-weight: bold; font-size: 18px; }
+.icon-btn {
+  background: transparent; color: var(--brand-ink); border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 6px; padding: 6px 10px; font-size: 14px; cursor: pointer;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.12); }
+main { flex: 1; width: 100%; max-width: 900px; margin: 0 auto; padding: 16px; }
+
+/* HUD */
+.hud {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
+  box-shadow: var(--shadow); margin-bottom: 8px;
+}
+.hud[hidden] { display: none; }
+.hud-level { font-weight: bold; color: var(--brand); }
+:root[data-theme="dark"] .hud-level { color: #8fb6db; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hud-level { color: #8fb6db; } }
+.hud-stats { display: flex; gap: 16px; align-items: center; font-weight: bold; }
+.lives { letter-spacing: 2px; }
+.lives.shake { animation: shake 0.4s; }
+.timer-wrap { height: 10px; background: var(--border); border-radius: 5px; overflow: hidden; margin-bottom: 14px; }
+.timer-wrap[hidden] { display: none; }
+.timer-bar { height: 100%; width: 100%; background: var(--teal); transition: width 0.1s linear; }
+.timer-bar.low { background: var(--red); }
+
+/* Screens */
+.screen[hidden] { display: none !important; }
+.panel {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 24px;
+  box-shadow: var(--shadow); text-align: center;
+}
+.big-emoji { font-size: 56px; line-height: 1.2; margin-bottom: 8px; }
+h1 { color: var(--brand); font-size: 28px; line-height: 1.25; margin-bottom: 8px; }
+h2 { color: var(--brand); font-size: 22px; margin-bottom: 8px; }
+:root[data-theme="dark"] h1, :root[data-theme="dark"] h2 { color: #8fb6db; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1, :root:not([data-theme="light"]) h2 { color: #8fb6db; } }
+.lead { color: var(--muted); font-size: 17px; margin-bottom: 16px; }
+.announce {
+  text-align: left; background: var(--tile); border-left: 4px solid var(--teal); border-radius: 6px;
+  padding: 12px 14px; margin: 14px auto 18px; max-width: 560px; font-size: 15px;
+}
+.rules { text-align: left; max-width: 560px; margin: 0 auto 18px; padding-left: 20px; }
+.rules li { margin-bottom: 6px; }
+.btn {
+  display: inline-block; border: none; border-radius: 6px; padding: 12px 24px; font-size: 16px;
+  font-weight: bold; cursor: pointer; margin: 4px; min-height: 44px;
+}
+.btn-primary { background: var(--red); color: #fff; }
+.btn-green { background: var(--teal); color: #fff; }
+.btn-outline { background: transparent; color: var(--text); border: 2px solid var(--brand); }
+.btn:hover { filter: brightness(1.07); }
+button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.best { margin-top: 12px; color: var(--muted); font-size: 14px; }
+.subinfo { color: var(--muted); margin-bottom: 12px; font-weight: bold; }
+
+/* Hazard grid */
+.tile-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px;
+}
+.tile, .seat {
+  background: var(--tile); color: var(--text); border: 2px solid var(--border); border-radius: 8px;
+  padding: 10px 6px; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 4px; min-height: 96px; font-size: 12px; transition: transform 0.1s;
+}
+.tile:hover:not(:disabled), .seat:hover:not(:disabled) { transform: translateY(-2px); border-color: var(--brand); }
+.tile:disabled, .seat:disabled { cursor: default; }
+.emo { font-size: 34px; line-height: 1; }
+.lbl { line-height: 1.2; text-align: center; }
+.tile.good { background: var(--good-bg); border-color: var(--teal); }
+.tile.bad { background: var(--bad-bg); border-color: var(--red); }
+.tile.missed { border-color: var(--gold); border-style: dashed; animation: pulse 1s infinite; }
+
+/* Quiz */
+.quiz-box { text-align: left; }
+.q-text { font-size: 20px; font-weight: bold; margin: 8px 0 16px; }
+.opts { display: grid; gap: 10px; }
+.opt {
+  text-align: left; background: var(--tile); color: var(--text); border: 2px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; font-size: 16px; cursor: pointer; min-height: 48px;
+}
+.opt:hover:not(:disabled) { border-color: var(--brand); }
+.opt:disabled { cursor: default; }
+.opt .key { display: inline-block; min-width: 24px; font-weight: bold; color: var(--muted); }
+.opt.good { background: var(--good-bg); border-color: var(--teal); }
+.opt.bad { background: var(--bad-bg); border-color: var(--red); }
+.feedback { margin: 14px 0 6px; min-height: 24px; font-size: 15px; }
+.feedback.good { color: var(--teal); }
+.feedback.bad { color: var(--red); }
+.feedback .why { display: block; color: var(--text); margin-top: 4px; }
+.right { text-align: right; }
+
+/* Seat grid */
+.seat-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 560px; margin: 0 auto;
+}
+.seat-row-label { text-align: center; color: var(--muted); font-size: 13px; margin: 8px 0; }
+.seat.un { background: var(--bad-bg); border-color: var(--red); animation: pop 0.2s; }
+.seat.ok { background: var(--good-bg); border-color: var(--teal); animation: pop 0.2s; }
+.seat.fixed { background: var(--good-bg); border-color: var(--gold); }
+
+/* Results */
+.stars { font-size: 40px; letter-spacing: 6px; margin: 6px 0; }
+.score-big { font-size: 40px; font-weight: bold; color: var(--teal); }
+.tips { text-align: left; max-width: 560px; margin: 16px auto; padding-left: 20px; }
+.tips li { margin-bottom: 6px; }
+
+/* Floating points */
+.floater {
+  position: fixed; pointer-events: none; font-weight: bold; font-size: 16px; z-index: 50;
+  animation: floatUp 0.9s ease-out forwards; text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  transform: translateX(-50%);
+}
+.floater.good { color: var(--teal); }
+.floater.bad { color: var(--red); }
+
+footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding: 16px; }
+
+@keyframes floatUp { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -40px; } }
+@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes pulse { 50% { transform: scale(1.04); } }
+@keyframes pop { from { transform: scale(0.85); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (max-width: 520px) {
+  h1 { font-size: 23px; }
+  .panel { padding: 18px 14px; }
+  .seat-grid { grid-template-columns: repeat(3, 1fr); }
+  .tile-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .tile { min-height: 88px; font-size: 11px; }
+  .emo { font-size: 30px; }
+  .q-text { font-size: 18px; }
+  .hud-stats { gap: 10px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">TECH EHS Shield</div>
+  <button type="button" class="icon-btn" id="muteBtn" aria-pressed="false">🔊 Sound on</button>
+</header>
+
+<main>
+  <div class="hud" id="hud" hidden>
+    <div class="hud-level" id="hudLevel">Level 1</div>
+    <div class="hud-stats">
+      <span>Score: <span id="hudScore">0</span></span>
+      <span class="lives" id="hudLives" aria-label="Lives">❤️❤️❤️</span>
+    </div>
+  </div>
+  <div class="timer-wrap" id="timerWrap" hidden><div class="timer-bar" id="timerBar"></div></div>
+
+  <!-- Start screen -->
+  <section class="screen" id="screen-start">
+    <div class="panel">
+      <div class="big-emoji" aria-hidden="true">🚌✈️🚆</div>
+      <h1>Dear Passengers</h1>
+      <p class="lead">The Safety Journey Game</p>
+      <div class="announce">
+        📢 <strong>Dear Passengers,</strong> welcome aboard! Before we depart, please help our crew keep this
+        journey safe. Complete all three safety checks to earn your Safety Champion badge.
+      </div>
+      <ol class="rules">
+        <li><strong>Hazard Hunt</strong> – find every hazard in the cabin.</li>
+        <li><strong>Safety Briefing Quiz</strong> – answer passenger safety questions.</li>
+        <li><strong>Seatbelt Check</strong> – buckle up every unbuckled passenger.</li>
+      </ol>
+      <p>You have <strong>3 lives ❤️</strong>. Mistakes cost a life – lose them all and the journey ends.</p>
+      <div style="margin-top:16px">
+        <button type="button" class="btn btn-primary" id="startBtn">BOARD NOW</button>
+      </div>
+      <p class="best" id="bestStart"></p>
+    </div>
+  </section>
+
+  <!-- Level intro -->
+  <section class="screen" id="screen-intro" hidden>
+    <div class="panel">
+      <div class="big-emoji" id="introIcon" aria-hidden="true">🔍</div>
+      <h2 id="introTitle">Level</h2>
+      <div class="announce" id="introText"></div>
+      <ul class="rules" id="introRules"></ul>
+      <button type="button" class="btn btn-green" id="introGo">START</button>
+    </div>
+  </section>
+
+  <!-- Level 1: Hazard Hunt -->
+  <section class="screen" id="screen-hazard" hidden>
+    <div class="panel">
+      <p class="subinfo" id="hazardInfo" aria-live="polite">Hazards found: 0 / 7</p>
+      <div class="tile-grid" id="hazardGrid"></div>
+    </div>
+  </section>
+
+  <!-- Level 2: Quiz -->
+  <section class="screen" id="screen-quiz" hidden>
+    <div class="panel quiz-box">
+      <p class="subinfo" id="qProgress">Question 1 of 6</p>
+      <p class="q-text" id="qText" tabindex="-1"></p>
+      <div class="opts" id="qOpts"></div>
+      <p class="feedback" id="qFeedback" aria-live="polite"></p>
+      <div class="right"><button type="button" class="btn btn-green" id="qNext" hidden>NEXT ➜</button></div>
+    </div>
+  </section>
+
+  <!-- Level 3: Seatbelt Check -->
+  <section class="screen" id="screen-belt" hidden>
+    <div class="panel">
+      <p class="subinfo" id="beltInfo" aria-live="polite">Secured: 0 · Missed: 0</p>
+      <p class="seat-row-label">⬆ Front of the vehicle</p>
+      <div class="seat-grid" id="seatGrid"></div>
+    </div>
+  </section>
+
+  <!-- Level complete -->
+  <section class="screen" id="screen-levelend" hidden>
+    <div class="panel">
+      <div class="big-emoji" aria-hidden="true">✅</div>
+      <h2 id="leTitle">Level complete!</h2>
+      <p class="lead" id="leSummary"></p>
+      <p id="leBonus"></p>
+      <p style="margin:10px 0 16px">Total score: <strong id="leScore">0</strong></p>
+      <button type="button" class="btn btn-green" id="leNext">CONTINUE JOURNEY ➜</button>
+    </div>
+  </section>
+
+  <!-- Final -->
+  <section class="screen" id="screen-final" hidden>
+    <div class="panel">
+      <div class="big-emoji" id="finIcon" aria-hidden="true">🏆</div>
+      <h2 id="finTitle">Journey complete!</h2>
+      <p class="lead" id="finRank"></p>
+      <div class="stars" id="finStars" aria-label="Stars"></div>
+      <div class="score-big" id="finScore">0</div>
+      <p class="best" id="finBest"></p>
+      <h3 style="margin-top:16px">Safety tips to remember</h3>
+      <ul class="tips">
+        <li>Keep aisles and emergency exits clear at all times.</li>
+        <li>Wear your seatbelt whenever you are seated.</li>
+        <li>Report smoke, spills and damaged equipment to the crew immediately.</li>
+        <li>In an emergency, leave your luggage behind and follow the exit lighting.</li>
+      </ul>
+      <button type="button" class="btn btn-primary" id="againBtn">PLAY AGAIN</button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">TECH EHS Shield · Empowering Safety, Simplifying Compliance</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- Data ---------- */
+  var HAZARDS = [
+    { e: '🧳', l: 'Bag blocking the aisle' },
+    { e: '💧', l: 'Spilled drink on floor' },
+    { e: '🚬', l: 'Passenger smoking' },
+    { e: '🔌', l: 'Exposed electrical wire' },
+    { e: '🚪', l: 'Blocked emergency exit' },
+    { e: '🔥', l: 'Smoke from luggage rack' },
+    { e: '🧸', l: 'Toy left in the aisle' },
+    { e: '🍾', l: 'Loose glass bottle rolling' },
+    { e: '🪟', l: 'Cracked window' },
+    { e: '📦', l: 'Unsecured heavy box overhead' },
+    { e: '🧍', l: 'Standing while vehicle moves' },
+    { e: '🔋', l: 'Overheating power bank' }
+  ];
+  var SAFE = [
+    { e: '💺', l: 'Empty seat' },
+    { e: '🧯', l: 'Charged fire extinguisher' },
+    { e: '🩹', l: 'First aid kit' },
+    { e: '🦺', l: 'Life vest under seat' },
+    { e: '📖', l: 'Safety instruction card' },
+    { e: '🚭', l: 'No-smoking sign' },
+    { e: '🔦', l: 'Emergency torch' },
+    { e: '🎫', l: 'Passenger ticket' },
+    { e: '🧑‍✈️', l: 'Crew member on duty' },
+    { e: '💡', l: 'Working cabin light' },
+    { e: '🎧', l: 'Headphones in seat pocket' },
+    { e: '🟢', l: 'Lit exit sign' },
+    { e: '🧴', l: 'Hand sanitiser' },
+    { e: '😴', l: 'Seated passenger resting' },
+    { e: '📱', l: 'Phone in flight mode' },
+    { e: '🛗', l: 'Clear exit path' }
+  ];
+  var HAZARD_COUNT = 7;
+  var SAFE_COUNT = 13;
+
+  // First option is always the correct answer (options are shuffled when shown).
+  var QUESTIONS = [
+    { q: 'Where should cabin bags be stored during the journey?',
+      o: ['In the overhead bin or under the seat in front', 'In the aisle for easy access', 'On your lap', 'Next to the emergency exit'],
+      why: 'Bags in aisles or near exits become trip hazards and block evacuation.' },
+    { q: 'When should you wear your seatbelt?',
+      o: ['Whenever you are seated', 'Only during take-off', 'Only when the driver asks', 'Never on short trips'],
+      why: 'Sudden braking or turbulence can happen at any time.' },
+    { q: 'During an emergency evacuation, what should you do with your luggage?',
+      o: ['Leave it behind', 'Take all of it with you', 'Take only the heaviest bag', 'Go back for it later'],
+      why: 'Carrying luggage slows everyone down and blocks exits.' },
+    { q: 'What does PASS stand for when using a fire extinguisher?',
+      o: ['Pull, Aim, Squeeze, Sweep', 'Push, Alert, Spray, Stop', 'Point, Activate, Shake, Spray', 'Pull, Alarm, Stand, Spray'],
+      why: 'Pull the pin, Aim at the base of the fire, Squeeze the handle, Sweep side to side.' },
+    { q: 'You notice smoke coming from the luggage rack. What should you do first?',
+      o: ['Alert the crew immediately', 'Open a window', 'Ignore it, it is probably nothing', 'Record a video of it'],
+      why: 'The crew are trained and equipped to handle fires – early reporting saves lives.' },
+    { q: 'The lights along the cabin floor are there to…',
+      o: ['Guide you to the emergency exits', 'Decorate the cabin', 'Help you find lost items', 'Show where to stand'],
+      why: 'In smoke or darkness, floor-path lighting leads you to the nearest exit.' },
+    { q: 'On an aircraft, when should you inflate your life vest?',
+      o: ['As you leave the aircraft', 'As soon as you put it on', 'While still in your seat', 'Before take-off'],
+      why: 'An inflated vest inside the cabin can trap you if the cabin fills with water.' },
+    { q: 'Oxygen masks drop down. Whose mask do you put on first?',
+      o: ['Your own, then help others', 'Your child’s first', 'The person next to you', 'Wait for the crew to help'],
+      why: 'You cannot help anyone if you lose consciousness first.' },
+    { q: 'You see a spilled drink in the aisle. What is the safest action?',
+      o: ['Warn others and report it to the crew', 'Step over it and carry on', 'Ignore it, it will dry', 'Cover it with a newspaper'],
+      why: 'Wet floors are a leading cause of slips and falls.' },
+    { q: 'What is the purpose of the brace position?',
+      o: ['To reduce injury during an impact', 'To sleep more comfortably', 'To stretch your back', 'To see out of the window'],
+      why: 'Bracing protects your head and limbs from sudden forces.' },
+    { q: 'Who should sit in an emergency exit row?',
+      o: ['Able adults willing to assist in an emergency', 'Young children', 'Passengers with the most luggage', 'Anyone who wants extra legroom'],
+      why: 'Exit-row passengers may need to open the exit and help others out.' },
+    { q: 'Where should you stand while waiting for a train?',
+      o: ['Behind the yellow safety line', 'Right at the platform edge', 'On the tracks if the train is late', 'Anywhere on the platform'],
+      why: 'Passing trains create strong air pressure that can pull you in.' },
+    { q: 'Is it safe to lean out of the window of a moving bus or train?',
+      o: ['No, never', 'Yes, if you hold on tightly', 'Only on straight roads', 'Only at low speed'],
+      why: 'Poles, signs and passing vehicles can cause serious injury.' },
+    { q: 'When is the best time to read the safety instruction card?',
+      o: ['Before the journey starts', 'Only during an emergency', 'After the journey ends', 'There is no need to read it'],
+      why: 'In an emergency there is no time to learn – know your exits in advance.' },
+    { q: 'The cabin fills with smoke. How should you move to the exit?',
+      o: ['Stay low and follow the floor lighting', 'Stand tall to see better', 'Run as fast as you can', 'Stay in your seat and wait'],
+      why: 'Cleaner air is closer to the floor and the lighting shows the way out.' },
+    { q: 'Your power bank becomes very hot during the journey. What should you do?',
+      o: ['Stop using it and tell the crew', 'Put it in the overhead bin', 'Keep charging your phone', 'Cover it with a blanket'],
+      why: 'Overheating lithium batteries can catch fire and need crew attention.' }
+  ];
+  var QUIZ_COUNT = 6;
+
+  var LEVELS = [
+    { name: 'Level 1 · Hazard Hunt', icon: '🔍',
+      text: '📢 <strong>Dear Passengers,</strong> our crew needs sharp eyes! Inspect the cabin and tap every <strong>hazard</strong> before we depart.',
+      rules: ['Tap all 7 hazards within 30 seconds (+100 each).', 'Tapping a safe item costs a life ❤️.', 'Finish early to earn a time bonus.'],
+      screen: 'hazard', start: startHazard },
+    { name: 'Level 2 · Safety Briefing Quiz', icon: '📋',
+      text: '📢 <strong>Dear Passengers,</strong> please pay attention to the safety briefing. Answer each question before the timer runs out.',
+      rules: ['6 questions, 15 seconds each.', 'Correct answer: +150 plus a speed bonus.', 'Wrong answer or timeout costs a life ❤️.', 'Tip: use keys 1–4 to answer and Enter for next.'],
+      screen: 'quiz', start: startQuiz },
+    { name: 'Level 3 · Seatbelt Check', icon: '🔒',
+      text: '📢 <strong>Dear Passengers,</strong> please fasten your seatbelts! Help the crew buckle up every passenger before they leave the seat.',
+      rules: ['Tap 😟 unbuckled passengers to buckle them (+80).', 'Tapping a 😊 buckled passenger costs a life ❤️.', 'A missed unbuckled passenger costs 30 points.', 'Survive 30 seconds – it gets faster!'],
+      screen: 'belt', start: startBelt }
+  ];
+
+  var BEST_KEY = 'dearPassengersBestScore';
+  var MAX_LIVES = 3;
+
+  /* ---------- State & helpers ---------- */
+  var state = { score: 0, lives: MAX_LIVES, level: 0, playing: false, timers: [], muted: false };
+
+  function $(id) { return document.getElementById(id); }
+  function later(fn, ms) { var id = setTimeout(fn, ms); state.timers.push({ k: 't', id: id }); return id; }
+  function every(fn, ms) { var id = setInterval(fn, ms); state.timers.push({ k: 'i', id: id }); return id; }
+  function clearTimers() {
+    state.timers.forEach(function (x) { if (x.k === 't') clearTimeout(x.id); else clearInterval(x.id); });
+    state.timers = [];
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function getBest() {
+    try { return parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function setBest(v) {
+    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) { /* storage unavailable */ }
+  }
+
+  var SCREENS = ['start', 'intro', 'hazard', 'quiz', 'belt', 'levelend', 'final'];
+  function show(name) {
+    SCREENS.forEach(function (s) { $('screen-' + s).hidden = (s !== name); });
+    document.querySelectorAll('.floater').forEach(function (f) { f.parentNode.removeChild(f); });
+    var inPlay = (name === 'hazard' || name === 'quiz' || name === 'belt');
+    $('timerWrap').hidden = !inPlay;
+    $('hud').hidden = (name === 'start' || name === 'final');
+    window.scrollTo(0, 0);
+  }
+
+  function renderHud() {
+    $('hudScore').textContent = state.score;
+    var hearts = '';
+    for (var i = 0; i < MAX_LIVES; i++) hearts += (i < state.lives ? '❤️' : '🖤');
+    $('hudLives').textContent = hearts;
+    $('hudLives').setAttribute('aria-label', 'Lives: ' + state.lives + ' of ' + MAX_LIVES);
+    $('hudLevel').textContent = LEVELS[state.level] ? LEVELS[state.level].name : '';
+  }
+
+  function addScore(n) {
+    state.score = Math.max(0, state.score + n);
+    renderHud();
+  }
+
+  function loseLife() {
+    if (!state.playing) return;
+    state.lives = Math.max(0, state.lives - 1);
+    renderHud();
+    var el = $('hudLives');
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+    if (state.lives <= 0) gameOver();
+  }
+
+  function floater(target, text, kind) {
+    var r = target.getBoundingClientRect();
+    var f = document.createElement('span');
+    f.className = 'floater ' + (kind || 'good');
+    f.textContent = text;
+    f.style.left = (r.left + r.width / 2) + 'px';
+    f.style.top = (r.top + 4) + 'px';
+    document.body.appendChild(f);
+    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 950);
+  }
+
+  /* Timer: returns { left(), stop() } */
+  function startTimer(seconds, onEnd) {
+    var end = performance.now() + seconds * 1000;
+    var stopped = false;
+    var bar = $('timerBar');
+    function paint(left) {
+      var pct = Math.max(0, Math.min(100, (left / seconds) * 100));
+      bar.style.width = pct + '%';
+      bar.classList.toggle('low', pct <= 30);
+    }
+    paint(seconds);
+    var id = every(function () {
+      if (stopped) return;
+      var left = Math.max(0, (end - performance.now()) / 1000);
+      paint(left);
+      if (left <= 0) { stopped = true; clearInterval(id); onEnd(); }
+    }, 100);
+    return {
+      left: function () { return Math.max(0, (end - performance.now()) / 1000); },
+      stop: function () { stopped = true; clearInterval(id); }
+    };
+  }
+
+  /* ---------- Sound ---------- */
+  var audioCtx = null;
+  function sfx(kind) {
+    if (state.muted) return;
+    try {
+      if (!audioCtx) {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      var notes = { good: [660, 880], bad: [220, 160], win: [523, 659, 784, 1047], click: [520] }[kind] || [440];
+      var t = audioCtx.currentTime;
+      notes.forEach(function (freq, i) {
+        var o = audioCtx.createOscillator();
+        var g = audioCtx.createGain();
+        o.type = kind === 'bad' ? 'sawtooth' : 'sine';
+        o.frequency.value = freq;
+        var s = t + i * 0.09;
+        g.gain.setValueAtTime(0.0001, s);
+        g.gain.exponentialRampToValueAtTime(0.15, s + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, s + 0.16);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(s); o.stop(s + 0.18);
+      });
+    } catch (e) { /* audio unavailable */ }
+  }
+
+  /* ---------- Flow ---------- */
+  function startGame() {
+    clearTimers();
+    state.score = 0; state.lives = MAX_LIVES; state.level = 0; state.playing = false;
+    renderHud();
+    showIntro(0);
+  }
+
+  function showIntro(i) {
+    state.level = i;
+    renderHud();
+    var L = LEVELS[i];
+    $('introIcon').textContent = L.icon;
+    $('introTitle').textContent = L.name;
+    $('introText').innerHTML = L.text;
+    $('introRules').innerHTML = '';
+    L.rules.forEach(function (r) {
+      var li = document.createElement('li'); li.textContent = r; $('introRules').appendChild(li);
+    });
+    show('intro');
+    $('introGo').focus();
+  }
+
+  function beginLevel() {
+    clearTimers();
+    state.playing = true;
+    renderHud();
+  }
+
+  function endLevel(bonus, summary, bonusText) {
+    if (!state.playing) return;
+    state.playing = false;
+    clearTimers();
+    if (bonus > 0) addScore(bonus);
+    sfx('win');
+    var last = state.level >= LEVELS.length - 1;
+    $('leTitle').textContent = LEVELS[state.level].name.split('·')[1].trim() + ' complete!';
+    $('leSummary').textContent = summary;
+    $('leBonus').textContent = bonus > 0 ? ('🎁 ' + (bonusText || 'Bonus') + ': +' + bonus) : '';
+    $('leScore').textContent = state.score;
+    $('leNext').textContent = last ? 'SEE MY RESULTS 🏆' : 'CONTINUE JOURNEY ➜';
+    show('levelend');
+    $('leNext').focus();
+  }
+
+  function nextFromLevelEnd() {
+    if (state.level >= LEVELS.length - 1) finish(true);
+    else showIntro(state.level + 1);
+  }
+
+  function gameOver() {
+    state.playing = false;
+    clearTimers();
+    sfx('bad');
+    later(function () { finish(false); }, 900);
+  }
+
+  function finish(completed) {
+    state.playing = false;
+    clearTimers();
+    var best = getBest();
+    var isNew = state.score > best;
+    if (isNew) { best = state.score; setBest(best); }
+
+    var rank, stars;
+    if (state.score >= 3000) { rank = 'Safety Champion'; stars = 3; }
+    else if (state.score >= 1800) { rank = 'Safety Officer'; stars = 2; }
+    else if (state.score >= 800) { rank = 'Safety Trainee'; stars = 1; }
+    else { rank = 'Passenger in Training'; stars = 0; }
+
+    $('finIcon').textContent = completed ? '🏆' : '🚧';
+    $('finTitle').textContent = completed ? 'Journey complete – thank you, Dear Passenger!' : 'Journey interrupted – out of lives!';
+    $('finRank').textContent = 'Your rank: ' + rank;
+    $('finStars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
+    $('finStars').setAttribute('aria-label', stars + ' of 3 stars');
+    $('finScore').textContent = state.score;
+    $('finBest').textContent = isNew && state.score > 0 ? '🎉 New best score!' : ('Best score: ' + best);
+    show('final');
+    if (completed) sfx('win');
+    $('againBtn').focus();
+  }
+
+  /* ---------- Level 1: Hazard Hunt ---------- */
+  function startHazard() {
+    beginLevel();
+    var items = shuffle(
+      shuffle(HAZARDS).slice(0, HAZARD_COUNT).map(function (h) { return { e: h.e, l: h.l, haz: true }; })
+        .concat(shuffle(SAFE).slice(0, SAFE_COUNT).map(function (s) { return { e: s.e, l: s.l, haz: false }; }))
+    );
+    var found = 0;
+    var grid = $('hazardGrid');
+    var info = $('hazardInfo');
+    var buttons = [];
+    grid.innerHTML = '';
+    info.textContent = 'Hazards found: 0 / ' + HAZARD_COUNT;
+
+    var timer = startTimer(30, function () {
+      buttons.forEach(function (x) {
+        x.b.disabled = true;
+        if (x.it.haz && !x.b.classList.contains('good')) x.b.classList.add('missed');
+      });
+      info.textContent = '⏰ Time is up! Missed hazards are highlighted.';
+      later(function () {
+        endLevel(0, 'You found ' + found + ' of ' + HAZARD_COUNT + ' hazards.');
+      }, 2000);
+    });
+
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tile';
+      b.setAttribute('aria-label', it.l);
+      b.innerHTML = '<span class="emo" aria-hidden="true"></span><span class="lbl"></span>';
+      b.firstChild.textContent = it.e;
+      b.lastChild.textContent = it.l;
+      b.addEventListener('click', function () {
+        if (!state.playing || b.disabled) return;
+        b.disabled = true;
+        if (it.haz) {
+          found++;
+          b.classList.add('good');
+          b.setAttribute('aria-label', it.l + ' – hazard found');
+          addScore(100);
+          floater(b, '+100', 'good');
+          sfx('good');
+          info.textContent = 'Hazards found: ' + found + ' / ' + HAZARD_COUNT;
+          if (found === HAZARD_COUNT) {
+            timer.stop();
+            var bonus = Math.ceil(timer.left()) * 10;
+            buttons.forEach(function (x) { x.b.disabled = true; });
+            later(function () {
+              endLevel(bonus, 'Brilliant! You found all ' + HAZARD_COUNT + ' hazards.', 'Time bonus');
+            }, 600);
+          }
+        } else {
+          b.classList.add('bad');
+          b.setAttribute('aria-label', it.l + ' – safe item, life lost');
+          floater(b, 'That was safe!', 'bad');
+          sfx('bad');
+          loseLife();
+        }
+      });
+      grid.appendChild(b);
+      buttons.push({ b: b, it: it });
+    });
+    show('hazard');
+  }
+
+  /* ---------- Level 2: Quiz ---------- */
+  var quiz = null;
+  function startQuiz() {
+    beginLevel();
+    quiz = { qs: shuffle(QUESTIONS).slice(0, QUIZ_COUNT), i: 0, correct: 0, answered: false, buttons: [], timer: null };
+    show('quiz');
+    askQuestion();
+  }
+
+  function askQuestion() {
+    var q = quiz.qs[quiz.i];
+    quiz.answered = false;
+    $('qProgress').textContent = 'Question ' + (quiz.i + 1) + ' of ' + quiz.qs.length;
+    $('qText').textContent = q.q;
+    var fb = $('qFeedback');
+    fb.textContent = ''; fb.className = 'feedback';
+    $('qNext').hidden = true;
+    var box = $('qOpts');
+    box.innerHTML = '';
+    var opts = shuffle(q.o.map(function (t, k) { return { t: t, ok: k === 0 }; }));
+    quiz.buttons = opts.map(function (o, idx) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'opt';
+      var key = document.createElement('span'); key.className = 'key'; key.textContent = (idx + 1) + '.';
+      b.appendChild(key);
+      b.appendChild(document.createTextNode(' ' + o.t));
+      b.addEventListener('click', function () { answerQuestion(o, b); });
+      box.appendChild(b);
+      return { b: b, o: o };
+    });
+    quiz.timer = startTimer(15, function () { answerQuestion(null, null); });
+    $('qText').focus();
+  }
+
+  function answerQuestion(o, b) {
+    if (!state.playing || !quiz || quiz.answered) return;
+    quiz.answered = true;
+    quiz.timer.stop();
+    var left = quiz.timer.left();
+    var q = quiz.qs[quiz.i];
+    quiz.buttons.forEach(function (x) {
+      x.b.disabled = true;
+      if (x.o.ok) x.b.classList.add('good');
+    });
+    var fb = $('qFeedback');
+    fb.textContent = '';
+    var head = document.createElement('strong');
+    var why = document.createElement('span'); why.className = 'why'; why.textContent = q.why;
+    if (o && o.ok) {
+      quiz.correct++;
+      var pts = 150 + Math.ceil(left) * 5;
+      addScore(pts);
+      head.textContent = '✅ Correct! +' + pts;
+      fb.className = 'feedback good';
+      if (b) floater(b, '+' + pts, 'good');
+      sfx('good');
+    } else {
+      if (b) b.classList.add('bad');
+      head.textContent = o ? '❌ Not quite.' : '⏰ Time is up!';
+      fb.className = 'feedback bad';
+      sfx('bad');
+    }
+    fb.appendChild(head); fb.appendChild(why);
+    if (!(o && o.ok)) {
+      loseLife();
+      if (!state.playing) return;
+    }
+    $('qNext').textContent = quiz.i + 1 < quiz.qs.length ? 'NEXT ➜' : 'FINISH QUIZ ➜';
+    $('qNext').hidden = false;
+    $('qNext').focus();
+  }
+
+  function nextQuestion() {
+    if (!state.playing || !quiz || !quiz.answered) return;
+    quiz.i++;
+    if (quiz.i < quiz.qs.length) {
+      askQuestion();
+    } else {
+      var perfect = quiz.correct === quiz.qs.length;
+      endLevel(perfect ? 300 : 0, 'You answered ' + quiz.correct + ' of ' + quiz.qs.length + ' questions correctly.', 'Perfect briefing bonus');
+    }
+  }
+
+  /* ---------- Level 3: Seatbelt Check ---------- */
+  var SEAT_VIEW = {
+    empty: ['💺', 'Empty seat'],
+    un: ['😟', 'Unbuckled!'],
+    ok: ['😊', 'Buckled'],
+    fixed: ['😃', 'Secured ✓']
+  };
+
+  function startBelt() {
+    beginLevel();
+    var DURATION = 30;
+    var grid = $('seatGrid');
+    var info = $('beltInfo');
+    var seats = [];
+    var secured = 0, missed = 0;
+    var t0 = performance.now();
+    grid.innerHTML = '';
+
+    function updateInfo() { info.textContent = 'Secured: ' + secured + ' · Missed: ' + missed; }
+    function setSeat(s, st) {
+      s.st = st;
+      s.b.className = 'seat ' + st;
+      s.b.firstChild.textContent = SEAT_VIEW[st][0];
+      s.b.lastChild.textContent = SEAT_VIEW[st][1];
+      s.b.setAttribute('aria-label', 'Seat ' + (s.n + 1) + ': ' + SEAT_VIEW[st][1]);
+    }
+    function clearSeatTimer(s) { if (s.tid) { clearTimeout(s.tid); s.tid = null; } }
+    function progress() { return Math.min(1, (performance.now() - t0) / (DURATION * 1000)); }
+
+    for (var k = 0; k < 12; k++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.innerHTML = '<span class="emo" aria-hidden="true"></span><span class="lbl"></span>';
+      var s = { b: b, n: k, st: 'empty', tid: null };
+      (function (seat) { b.addEventListener('click', function () { tap(seat); }); })(s);
+      grid.appendChild(b);
+      seats.push(s);
+      setSeat(s, 'empty');
+    }
+    updateInfo();
+
+    function spawn() {
+      if (!state.playing) return;
+      var p = progress();
+      var free = seats.filter(function (x) { return x.st === 'empty'; });
+      if (free.length) {
+        var seat = free[Math.floor(Math.random() * free.length)];
+        var unbuckled = Math.random() < 0.6;
+        setSeat(seat, unbuckled ? 'un' : 'ok');
+        var stay = Math.round(2000 - 900 * p);
+        seat.tid = later(function () {
+          seat.tid = null;
+          if (!state.playing) return;
+          if (seat.st === 'un') {
+            missed++;
+            addScore(-30);
+            floater(seat.b, '-30 missed', 'bad');
+            sfx('bad');
+            updateInfo();
+          }
+          setSeat(seat, 'empty');
+        }, stay);
+      }
+      later(spawn, Math.round(950 - 500 * p));
+    }
+
+    function tap(seat) {
+      if (!state.playing) return;
+      if (seat.st === 'un') {
+        clearSeatTimer(seat);
+        secured++;
+        addScore(80);
+        setSeat(seat, 'fixed');
+        floater(seat.b, '+80', 'good');
+        sfx('good');
+        updateInfo();
+        seat.tid = later(function () { seat.tid = null; if (state.playing) setSeat(seat, 'empty'); }, 500);
+      } else if (seat.st === 'ok') {
+        clearSeatTimer(seat);
+        setSeat(seat, 'empty');
+        floater(seat.b, 'Already buckled!', 'bad');
+        sfx('bad');
+        loseLife();
+      }
+    }
+
+    startTimer(DURATION, function () {
+      seats.forEach(function (x) { x.b.disabled = true; if (x.st === 'un') missed++; });
+      updateInfo();
+      var bonus = missed === 0 && secured > 0 ? 300 : 0;
+      endLevel(bonus, 'You secured ' + secured + ' passengers and missed ' + missed + '.', 'No passenger left unbuckled');
+    });
+    show('belt');
+    later(spawn, 400);
+  }
+
+  /* ---------- Wiring ---------- */
+  $('startBtn').addEventListener('click', function () { sfx('click'); startGame(); });
+  $('againBtn').addEventListener('click', function () { sfx('click'); startGame(); });
+  $('introGo').addEventListener('click', function () { sfx('click'); LEVELS[state.level].start(); });
+  $('leNext').addEventListener('click', function () { sfx('click'); nextFromLevelEnd(); });
+  $('qNext').addEventListener('click', nextQuestion);
+  $('muteBtn').addEventListener('click', function () {
+    state.muted = !state.muted;
+    this.textContent = state.muted ? '🔇 Sound off' : '🔊 Sound on';
+    this.setAttribute('aria-pressed', String(state.muted));
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if ($('screen-quiz').hidden || !quiz || !state.playing) return;
+    if (!quiz.answered && /^[1-4]$/.test(e.key)) {
+      var x = quiz.buttons[parseInt(e.key, 10) - 1];
+      if (x) { e.preventDefault(); answerQuestion(x.o, x.b); }
+    }
+  });
+
+  var best = getBest();
+  $('bestStart').textContent = best > 0 ? ('🏅 Best score: ' + best) : '';
+  renderHud();
+  show('start');
+})();
+</script>
+</body>
+</html>
