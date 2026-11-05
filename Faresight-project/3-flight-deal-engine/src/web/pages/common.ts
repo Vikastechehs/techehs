@@ -12,11 +12,11 @@ export const secure = config.publicUrl.startsWith('https:');
 /** Per-request state for a page: the signed-in user and the cookies to set on the response. */
 export interface P extends Ctx { user: User | null; ck: Record<string, string>; out: string[] }
 
-export async function makeP(ctx: Ctx): Promise<P> {
+export async function makeP(ctx: Ctx, lookupUser = true): Promise<P> {
   const ck = cookies(ctx.req);
   // Don't touch the session store for visitors who have no session at all.
   const hasAuth = !!ck[SESSION_COOKIE] || (ctx.req.headers.authorization ?? '').startsWith('Bearer ');
-  const user = hasAuth ? await userFromRequest(ctx.db, ctx.req) : null;
+  const user = hasAuth && lookupUser ? await userFromRequest(ctx.db, ctx.req) : null;
   return { ...ctx, user, ck, out: [] };
 }
 

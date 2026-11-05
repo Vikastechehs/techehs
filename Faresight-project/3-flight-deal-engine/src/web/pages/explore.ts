@@ -79,8 +79,8 @@ export async function handleExplore(p: P): Promise<boolean> {
       <div>${overall ? stat('Normal return price', money(overall, cur), 'Middle of recent fares') : ''}${cheapM ? stat('Cheapest month', esc(monthName(cheapM.ym).split(' ')[0]), `Normally ${money(cheapM.n, cur)}`) : ''}${dearM && dearM !== cheapM ? stat('Priciest month', esc(monthName(dearM.ym).split(' ')[0]), `Normally ${money(dearM.n, cur)}`) : ''}${cheapest ? stat('Cheapest date seen', money(cheapest.price, cur), fmtDate(cheapest.depart)) : ''}</div>
       ${deal ? `<div class="panel" style="border-color:var(--good)"><h2>Live deal on this route</h2>
         <p><span class="price">${money(deal.price, deal.currency)}</span> return · <span class="save">${Math.round(deal.saving_pct)}% below normal</span></p>
-        <p class="meta">${deal.pairs} date pairs · ${r.max_stops === 0 ? 'nonstop' : 'up to 1 stop'} · checked ${ago(deal.last_verified)}</p><p><a class="btn" href="/deal/${deal.id}">See the dates</a></p></div>` : ''}
-      <div class="row" style="margin:8px 0 16px"><a class="btn" href="/watch?origin=${esc(o)}&destination=${esc(d)}">Watch this route</a><a class="btn secondary" href="/alerts">Get alerts from ${esc(r.from_city)}</a></div>
+        <p class="meta">${deal.pairs} date pair${deal.pairs === 1 ? "" : "s"} · ${r.max_stops === 0 ? 'nonstop' : 'up to 1 stop'} · checked ${ago(deal.last_verified)}</p><p><a class="btn" href="/deal/${deal.id}">See the dates</a></p></div>` : ''}
+      <div class="row" style="margin:8px 0 16px"><a class="btn" href="/watch?origin=${esc(o)}&amp;destination=${esc(d)}">Watch this route</a><a class="btn secondary" href="/alerts">Get alerts from ${esc(r.from_city)}</a></div>
       <h2>Price calendar</h2>
       <p class="meta legend">Cheapest return fare per departure date, ${r.trip_lengths?.[0] ?? 7} nights, economy, seen in the last 14 days.
         <span class="lv-deal"></span>deal level <span class="lv-low"></span>below normal <span class="lv-mid"></span>normal <span class="lv-high"></span>above normal</p>
@@ -106,7 +106,7 @@ export async function handleExplore(p: P): Promise<boolean> {
       LEFT JOIN LATERAL (SELECT id, price, saving_pct FROM deals WHERE route_id = r.id AND status = 'live' ORDER BY price LIMIT 1) d ON true
       WHERE r.active AND r.origin = $1`, [from]);
     const list = rows
-      .map(x => ({ ...x, best: Math.min(x.cheapest ?? Infinity, x.deal_price ?? Infinity), region: regionOf(x.destination) }))
+      .map((x): Record<string, any> => ({ ...x, best: Math.min(x.cheapest ?? Infinity, x.deal_price ?? Infinity), region: regionOf(x.destination) }))
       .filter(x => (!region || x.region === region) && (!budget || x.best <= budget))
       .sort((a, b) => (a.deal_id ? 0 : 1) - (b.deal_id ? 0 : 1) || a.best - b.best);
     const city = os.find(x => x.origin === from)?.city ?? from;

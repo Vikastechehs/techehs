@@ -10,3 +10,12 @@ export async function enqueue(db: Db, m: OutMessage): Promise<number> {
     [m.channel, m.to, m.subject ?? null, m.body, m.meta == null ? null : JSON.stringify(m.meta)]);
   return Number(r.id);
 }
+
+/** Erases stored messages to these addresses (email, phone, Telegram chat id, push endpoint), whatever their status. Returns rows deleted. */
+export async function forgetAddress(db: Db, addresses: string[]): Promise<number> {
+  const list = addresses.filter(a => typeof a === 'string' && a.length > 0);
+  if (!list.length) return 0;
+  const rows = await db.query(`DELETE FROM outbox WHERE to_address = ANY($1::text[]) OR lower(to_address) = ANY($2::text[]) RETURNING id`,
+    [list, list.map(a => a.toLowerCase())]);
+  return rows.length;
+}

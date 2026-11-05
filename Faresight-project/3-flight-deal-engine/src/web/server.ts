@@ -78,6 +78,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         const body = `${status}<h1>${esc(d.from_city)} → ${esc(d.to_city)}</h1>
           <p class="lead">Return · ${d.max_stops === 0 ? 'nonstop' : 'up to 1 stop'} · verified ${ago(d.last_verified)}</p>
           <p><span class="price">${money(d.price, d.currency)}</span> <span class="norm">normally ${money(d.normal_price, d.currency)}</span> · <span class="save">${d.saving_pct}% below</span></p>
+          <p><a class="btn secondary" href="/deal/${d.id}/save">Save deal</a> <a class="btn secondary" href="/route/${esc(d.origin)}-${esc(d.destination)}">Price calendar &amp; watch this route</a></p>
           <h2>Dates that work</h2>
           <table><thead><tr><th>Depart</th><th>Return</th><th>Price</th><th></th></tr></thead><tbody>
           ${dates.map(x => `<tr><td>${fmtDate(x.depart)}</td><td>${fmtDate(x.return_date)}</td><td>${money(x.price, d.currency)}<div class="meta">${esc(x.airlines ?? '')}</div></td>
@@ -132,6 +133,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         const recent = await db.query(`${DEAL_LIST_SQL} WHERE d.status IN ('live','expired','rejected') ORDER BY coalesce(d.expired_at, d.published_at, d.first_seen) DESC LIMIT 15`);
         const stat = (label: string, v: unknown) => `<span class="stat"><b>${esc(v)}</b>${esc(label)}</span>`;
         const body = `<h1>Admin</h1>
+          <p><a href="/admin/users">Users</a> · <a href="/admin/users/outbox">Outbox</a></p>
           <div>${stat('live deals', counts.live)}${stat('waiting for review', counts.review)}${stat('in deep check', counts.candidate)}${stat('expired', counts.expired)}${stat('rejected', counts.rejected)}</div>
           <div>${stat('prices stored', obs.n.toLocaleString('en-IN'))}${stat('prices last 24 h', obs.day.toLocaleString('en-IN'))}${stat(`credits this month of ${Number(s.raw.monthly_credit_budget).toLocaleString('en-IN')}`, credits.toLocaleString('en-IN'))}${stat('booking clicks, 24 h', clk.day)}</div>
           <p class="meta">Fare source: <b>${esc(config.source)}</b>${config.source === 'mock' ? ' (simulated fares; add SCRAPEDO_TOKEN to .env for real ones)' : ''} · auto-approve: <b>${esc(s.raw.auto_approve)}</b></p>
