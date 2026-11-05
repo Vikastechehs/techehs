@@ -135,23 +135,25 @@ if (cmd === 'status') {
         mkdirSync(join(ROOT, 'data'), { recursive: true }); writeFileSync(samplePath, body);
       } })
     : mockHotelSource();
-  await scheduleHotelSweeps(db, s, { limit: n });
+  const t0 = new Date();
+  const q = await scheduleHotelSweeps(db, s, { limit: n });
+  if (!q.enqueued) log(`No new check-in dates are due${q.reason ? ` (${q.reason})` : ''}; running whatever is already queued.`);
   log(`Running ${n} hotel searches with ${source.name}...`);
-  const r = await runHotelWorkers(db, source, s, makeAfterHotelSearch(db, getS, async () => {}), { concurrency: Math.min(5, n), maxJobs: n, log });
+  const r = await runHotelWorkers(db, source, s, makeAfterHotelSearch(db, getS, async () => {}), { concurrency: Math.min(5, n), maxJobs: n, drain: true, log });
   log(`Done: ${r.done} ok, ${r.failed} failed${r.fatal ? `, stopped: ${r.fatal}` : ''}.`);
   if (saved) log(`First raw response saved to ${samplePath}`);
   const errs = await db.query(`SELECT error, count(*)::int AS n FROM hotel_search_jobs WHERE status = 'queued' AND error IS NOT NULL GROUP BY error ORDER BY n DESC LIMIT 5`);
   if (errs.length) { log('Searches that failed and will be retried later:'); console.table(errs); }
   const [{ offers }] = await db.query(`SELECT count(*)::int AS offers FROM hotel_prices WHERE job_id IN
-    (SELECT id FROM hotel_search_jobs WHERE status = 'done' AND finished_at > now() - interval '1 hour')`);
+    (SELECT id FROM hotel_search_jobs WHERE status = 'done' AND finished_at >= $1)`, [t0]);
   if (r.done > 0 && offers === 0) {
     log('WARNING: searches succeeded but 0 hotels were parsed. The Scrape.do hotels endpoint shape is unverified:');
     log(`  check endpoint/params at top of src/hotels/sources/scrapedo.ts and compare with ${saved ? samplePath : 'the raw response'}.`);
     process.exitCode = 1;
-  } else {
+  } else if (r.done > 0) {
     log(`${offers} hotel prices stored.`);
     console.table(await db.query(`SELECT h.city, left(h.name, 40) AS hotel, h.stars, h.rating, p.checkin::text AS checkin, p.nights, round(p.per_night) AS per_night, p.provider
-      FROM hotel_prices p JOIN hotels h ON h.id = p.hotel_id ORDER BY p.id DESC LIMIT 15`));
+      FROM hotel_prices p JOIN hotels h ON h.id = p.hotel_id WHERE p.observed_at >= $1 ORDER BY p.id DESC LIMIT 15`, [t0]));
   }
 } else if (cmd === 'demo') {
   if (config.source !== 'mock' && arg !== 'force') { log('Demo uses simulated fares. Remove SCRAPEDO_TOKEN from .env first, or run "demo force".'); process.exit(1); }

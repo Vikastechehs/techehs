@@ -126,3 +126,14 @@ The image runs as a non-root user and needs Docker Compose 2.24 or newer (for th
 - Week 3: Next.js site with route pages for search traffic, cached-API sweep source
 - Week 4: metrics dashboard, second market
 - Android app (the `/api/v1` API and bearer-token sign-in are ready for it)
+
+## Hotels
+
+Hotel deals run inside the same app, database, accounts, alerts and admin as flights.
+
+- **Cities:** 46 (39 flight destinations plus Goa, Jaipur, Kochi, Delhi, Mumbai, Bengaluru, Udaipur), about 12 hotels tracked per city.
+- **Source:** the same Scrape.do key (`SCRAPEDO_TOKEN`), Google Hotels. Hotel searches share `monthly_credit_budget` with flights and are capped by `hotel_daily_search_cap`. `HOTEL_SOURCE=mock` uses simulated hotels.
+- **Deal rule:** price a night at most 75% of that hotel's own normal price and at least ₹1,000 a night cheaper, hotel rated 7.5/10+ and 3★+, on 3 or more check-in dates. Re-checked every 6 hours. All `hotel_*` settings are editable on the admin page.
+- **Pages:** `/hotels`, `/hotels/expired`, `/hotel-deal/:id`, `/hotels/:city` (price-a-night calendar), `/go/h/:id` (logged redirect to Booking.com, wrapped in `HOTEL_AFFILIATE_URL_TEMPLATE` when set), `/api/hotel-deals`, admin `/admin/hotels`. Flight deal pages show hotel deals in the destination, and hotel deal pages show flights there.
+- **User data:** hotel alerts by city, saving, max price a night and minimum stars; saved hotel deals; both in `/alerts`, `/account`, `/saved`, data export and account deletion. API: `GET /api/v1/hotel-cities`, `GET/POST /api/v1/me/hotel-alerts`, `DELETE /api/v1/me/hotel-alerts/:city`, `GET /api/v1/me/saved-hotels`, `PUT/DELETE /api/v1/me/saved-hotels/:id`.
+- **First real test:** run `test-hotels.bat` (`node src/cli.ts hotels-once 5`, about 50 credits). The Scrape.do Google Hotels request format could not be checked against live Scrape.do yet. If no hotels are parsed, the raw reply is saved to `data/hotels-sample.json`; correct the constants at the top of `src/hotels/sources/scrapedo.ts`.
