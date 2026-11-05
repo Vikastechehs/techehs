@@ -185,6 +185,8 @@ test('delivery: email, telegram and whatsapp through the provider APIs', async (
   const dealId = await makeDeal(db, 'DEL', 'BKK', 13000, 20000);
   const u = await makeUser(db, { channels: [{ kind: 'email' }, { kind: 'telegram', address: '555' }, { kind: 'whatsapp', address: '+91 98123 45678' }] });
   await alert(db, u.id, 'DEL');
+  // The person wrote to us recently, so WhatsApp allows free text (outside 24 h a template is sent: test/whatsapp.test.ts)
+  await db.query(`UPDATE notification_channels SET last_inbound_at = now() WHERE user_id = $1 AND kind = 'whatsapp'`, [u.id]);
   await onDealLive(db, dealId);
   const { f, calls } = fakeFetch();
   await withConfig({ resendApiKey: 're_test', telegramToken: 'tg123', whatsappToken: 'wa_tok', whatsappPhoneId: '999' }, async () => {
