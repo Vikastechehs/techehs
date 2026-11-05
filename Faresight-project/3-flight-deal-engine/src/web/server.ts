@@ -12,6 +12,8 @@ import { HttpError } from './http.ts';
 import { handleUserApi } from '../users/api.ts';
 import { handleAccountPages } from './account.ts';
 import { handleAdminUsers } from './admin-users.ts';
+import { handleHotelPages } from './hotels.ts';
+import { handleAdminHotels } from './admin-hotels.ts';
 
 const DEAL_LIST_SQL = `
   SELECT d.*, r.origin, r.destination, r.max_stops, ao.city AS from_city, ad.city AS to_city,
@@ -119,6 +121,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
           res.writeHead(303, { location: '/admin#settings' }); return res.end();
         }
         if (p.startsWith('/admin/users') && await handleAdminUsers(ctx)) return;
+        if (p.startsWith('/admin/hotels') && await handleAdminHotels(ctx)) return;
         if (p !== '/admin') return notFound(res);
         const s = await getSettings(db);
         const [counts] = await db.query(`SELECT
@@ -157,6 +160,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         return send(res, 200, layout('Admin', body, { admin: true }));
       }
 
+      if (await handleHotelPages(ctx)) return;
       if (await handleAccountPages(ctx)) return;
       return notFound(res);
     } catch (e) {

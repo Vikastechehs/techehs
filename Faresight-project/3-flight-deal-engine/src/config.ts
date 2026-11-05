@@ -40,6 +40,10 @@ export const config = {
   vapidPublicKey: env('VAPID_PUBLIC_KEY'),                   // web push
   vapidPrivateKey: env('VAPID_PRIVATE_KEY'),
   vapidSubject: env('VAPID_SUBJECT', 'mailto:admin@example.com'),
+  // Hotels
+  hotelSource: env('HOTEL_SOURCE', env('SCRAPEDO_TOKEN') ? 'scrapedo' : 'mock'),
+  hotelAffiliateTemplate: env('HOTEL_AFFILIATE_URL_TEMPLATE'),  // {url} = encoded Booking.com URL
+  hotelsEnabled: env('HOTELS_ENABLED', 'true') === 'true',
   source: env('FARE_SOURCE', env('SCRAPEDO_TOKEN') ? 'scrapedo' : 'mock'),
 };
 
@@ -67,4 +71,18 @@ export const DEFAULT_SETTINGS: Record<string, string> = {
   daily_search_cap: '6000',          // most sweep searches per day (the first full calendar takes ~2 days)
   auto_approve: 'false',             // true = publish without admin review
   max_attempts: '4',
+  // Hotels (same idea as flights: per-hotel normal price, deep check, re-check)
+  hotel_deal_max_ratio: '0.75',      // per-night price at most 75% of that hotel's normal price
+  hotel_min_saving_night: '1000',    // and at least this much cheaper per night
+  hotel_min_rating: '7.5',           // only hotels rated 7.5/10 or better
+  hotel_min_stars: '3',
+  hotel_min_passing_dates: '3',      // check-in dates that must pass the deep check
+  hotel_deep_days_each_side: '7',
+  hotel_min_history: '8',            // a hotel needs this many prices before it can produce deals
+  hotel_sweep_horizon_days: '180',   // check-ins up to 6 months ahead
+  hotel_sweep_step_days: '7',
+  hotel_sweep_refresh_days: '7',
+  hotel_daily_search_cap: '1500',    // hotel searches per day (shares monthly_credit_budget with flights)
+  hotel_verify_every_hours: '6',
+  hotel_verify_tolerance: '1.05',
 };

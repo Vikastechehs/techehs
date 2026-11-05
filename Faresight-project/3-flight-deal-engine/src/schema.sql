@@ -260,3 +260,154 @@ CREATE TABLE IF NOT EXISTS user_events (
 CREATE INDEX IF NOT EXISTS user_events_user ON user_events (user_id, created_at DESC);
 
 ALTER TABLE clicks ADD COLUMN IF NOT EXISTS user_id int REFERENCES users(id) ON DELETE SET NULL;
+
+-- ============================================================================================
+-- Hotels: cities, hotels, price sweep, normal price per hotel, hotel deals, and user data for hotels
+-- ============================================================================================
+
+CREATE TABLE IF NOT EXISTS hotel_cities (
+  code       text PRIMARY KEY,                     -- airport/city code, e.g. BKK, GOI-style codes for India use the airport IATA
+  name       text NOT NULL,                        -- Bangkok
+  country    text NOT NULL,                        -- TH
+  region     text,                                 -- seAsia, saGulf, eastAsia, europe, longHaul, india
+  query      text NOT NULL,                        -- search text sent to the source, e.g. "Bangkok, Thailand"
+  stay_nights int[] NOT NULL DEFAULT '{3,2,5}',    -- first one is the sweep length
+  priority   int NOT NULL DEFAULT 1,
+  active     boolean NOT NULL DEFAULT true
+);
+
+CREATE TABLE IF NOT EXISTS hotels (
+  id         serial PRIMARY KEY,
+  city       text NOT NULL REFERENCES hotel_cities(code),
+  source     text NOT NULL,                        -- mock, scrapedo, ...
+  source_id  text NOT NULL,                        -- the source's stable hotel id
+  name       text NOT NULL,
+  stars      int,                                  -- 1-5 hotel class
+  rating     double precision,                     -- guest rating out of 10 (normalised)
+  reviews    int,
+  area       text,                                 -- neighbourhood
+  lat        double precision,
+  lng        double precision,
+  image_url  text,
+  active     boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source, source_id)
+);
+CREATE INDEX IF NOT EXISTS hotels_city ON hotels (city);
+
+CREATE TABLE IF NOT EXISTS hotel_search_jobs (
+  id            bigserial PRIMARY KEY,
+  kind          text NOT NULL CHECK (kind IN ('sweep','deep','verify')),
+  city          text NOT NULL REFERENCES hotel_cities(code),
+  hotel_deal_id int,
+  checkin       date NOT NULL,
+  nights        int  NOT NULL,
+  status        text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','running','done','failed')),
+  attempts      int  NOT NULL DEFAULT 0,
+  credits       int  NOT NULL DEFAULT 0,
+  error         text,
+  run_at        timestamptz NOT NULL DEFAULT now(),
+  started_at    timestamptz,
+  finished_at   timestamptz,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS hotel_jobs_queue ON hotel_search_jobs (status, run_at);
+CREATE UNIQUE INDEX IF NOT EXISTS hotel_jobs_open
+  ON hotel_search_jobs (kind, city, checkin, nights, coalesce(hotel_deal_id, 0))
+  WHERE status IN ('queued','running');
+
+-- One row per hotel per search: the cheapest bookable room rate for that stay
+CREATE TABLE IF NOT EXISTS hotel_prices (
+  id          bigserial PRIMARY KEY,
+  hotel_id    int  NOT NULL REFERENCES hotels(id),
+  checkin     date NOT NULL,
+  nights      int  NOT NULL,
+  per_night   double precision NOT NULL,           -- total / nights, taxes included where the source gives them
+  total       double precision NOT NULL,
+  currency    text NOT NULL,
+  provider    text,                                -- the booking site with the lowest rate, if known
+  source      text NOT NULL,
+  kind        text NOT NULL DEFAULT 'sweep',
+  job_id      bigint,
+  observed_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS hotel_prices_hotel ON hotel_prices (hotel_id, checkin, observed_at DESC);
+
+CREATE TABLE IF NOT EXISTS hotel_norms (
+  hotel_id     int  NOT NULL REFERENCES hotels(id),
+  month        date NOT NULL,
+  median_per_night double precision NOT NULL,
+  sample_size  int  NOT NULL,
+  computed_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (hotel_id, month)
+);
+
+CREATE TABLE IF NOT EXISTS hotel_deals (
+  id            serial PRIMARY KEY,
+  hotel_id      int  NOT NULL REFERENCES hotels(id),
+  month         date NOT NULL,
+  per_night     double precision NOT NULL,         -- price per night shown to users
+  normal_per_night double precision NOT NULL,
+  saving_pct    double precision NOT NULL,
+  currency      text NOT NULL,
+  status        text NOT NULL CHECK (status IN ('candidate','review','live','expired','rejected')),
+  reason        text,
+  first_seen    timestamptz NOT NULL DEFAULT now(),
+  published_at  timestamptz,
+  last_verified timestamptz,
+  expired_at    timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS hotel_deals_open ON hotel_deals (hotel_id, month) WHERE status IN ('candidate','review','live');
+
+CREATE TABLE IF NOT EXISTS hotel_deal_dates (
+  id            serial PRIMARY KEY,
+  hotel_deal_id int  NOT NULL REFERENCES hotel_deals(id) ON DELETE CASCADE,
+  checkin       date NOT NULL,
+  nights        int  NOT NULL,
+  per_night     double precision NOT NULL,
+  total         double precision NOT NULL,
+  normal_per_night double precision NOT NULL,
+  provider      text,
+  last_checked  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (hotel_deal_id, checkin, nights)
+);
+
+CREATE TABLE IF NOT EXISTS hotel_clicks (
+  id                 bigserial PRIMARY KEY,
+  hotel_deal_id      int NOT NULL REFERENCES hotel_deals(id),
+  hotel_deal_date_id int REFERENCES hotel_deal_dates(id),
+  user_id            int REFERENCES users(id) ON DELETE SET NULL,
+  channel            text,
+  partner            text,
+  clicked_at         timestamptz NOT NULL DEFAULT now()
+);
+
+-- User data for hotels
+CREATE TABLE IF NOT EXISTS hotel_alert_subscriptions (
+  id             serial PRIMARY KEY,
+  user_id        int  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  city           text NOT NULL REFERENCES hotel_cities(code),
+  min_saving_pct int  NOT NULL DEFAULT 25 CHECK (min_saving_pct BETWEEN 25 AND 90),
+  max_per_night  double precision,
+  min_stars      int CHECK (min_stars BETWEEN 1 AND 5),
+  active         boolean NOT NULL DEFAULT true,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, city)
+);
+
+CREATE TABLE IF NOT EXISTS saved_hotel_deals (
+  user_id       int NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  hotel_deal_id int NOT NULL REFERENCES hotel_deals(id),
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, hotel_deal_id)
+);
+
+-- Notifications can now be about a hotel deal
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS hotel_deal_id int REFERENCES hotel_deals(id);
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_kind_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_kind_check
+  CHECK (kind IN ('deal_live','deal_ended','route_watch','digest','system','hotel_live','hotel_ended'));
+DROP INDEX IF EXISTS notifications_once;
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_once_v2
+  ON notifications (user_id, coalesce(deal_id, 0), coalesce(hotel_deal_id, 0), kind, coalesce(channel_id, 0))
+  WHERE kind <> 'system' AND kind <> 'digest';
