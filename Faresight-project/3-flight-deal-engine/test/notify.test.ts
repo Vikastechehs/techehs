@@ -135,7 +135,7 @@ test('deal ended reaches only users who were told about it (on those channels) o
   await onDealLive(db, dealId);
   await withConfig(noProviders, async () => { await deliverOutbox(db); });
   // Telegram user got it later via a second channel added after the deal went live: that channel is not told about the end
-  await db.query(`INSERT INTO notification_channels (user_id, kind, address) VALUES ($1, 'email', 'late@example.com')`, [told.id]);
+  await db.query(`INSERT INTO notification_channels (user_id, kind, address, verified_at) VALUES ($1, 'email', 'late@example.com', now())`, [told.id]);
 
   await db.query(`UPDATE deals SET status = 'expired', expired_at = now(), reason = 'price rose to 51200 (shown 42000)' WHERE id = $1`, [dealId]);
   await onDealEnded(db, dealId);

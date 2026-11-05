@@ -121,6 +121,17 @@ The older public `GET /api/deals` (live deals) is unchanged.
 
 The image runs as a non-root user and needs Docker Compose 2.24 or newer (for the optional `.env`). To run the image alone, pass `DATABASE_URL` and the other settings with `-e` or `--env-file`.
 
+## WhatsApp templates
+
+WhatsApp allows free text only within 24 hours of the person's last message. Outside that window alerts go as
+templates approved in Meta WhatsApp Manager: flight deal, hotel deal, deal ended, daily digest, and an authentication
+template for verification codes (codes always use it). The webhook `/webhooks/whatsapp` records incoming messages
+(opening the 24-hour window), handles STOP / START replies and records failed deliveries. Template errors from Meta
+fail the message at once with the reason in the outbox.
+
+The exact template texts to submit, their variables, buttons, env vars (`WHATSAPP_TEMPLATE_*`, `WHATSAPP_VERIFY_TOKEN`,
+`WHATSAPP_APP_SECRET`) and the webhook setup steps are in [docs/whatsapp-templates.md](docs/whatsapp-templates.md).
+
 ## Not built yet (from the spec)
 
 - Week 3: Next.js site with route pages for search traffic, cached-API sweep source
