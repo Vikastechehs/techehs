@@ -97,6 +97,14 @@ h2 { color: var(--brand); font-size: 22px; margin-bottom: 8px; }
 .btn-outline { background: transparent; color: var(--text); border: 2px solid var(--brand); }
 .btn:hover { filter: brightness(1.07); }
 button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+.journeys { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px; max-width: 640px; margin: 10px auto 0; }
+.journey {
+  background: var(--tile); color: var(--text); border: 2px solid var(--border); border-radius: 10px;
+  padding: 14px 8px; cursor: pointer; font-size: 15px; font-weight: bold; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 92px;
+}
+.journey:hover { border-color: var(--teal); transform: translateY(-2px); }
+.journey .emo { font-size: 36px; }
+.journey.surprise { border-style: dashed; border-color: var(--red); }
 .best { margin-top: 12px; color: var(--muted); font-size: 14px; }
 .subinfo { color: var(--muted); margin-bottom: 12px; font-weight: bold; }
 
@@ -200,7 +208,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   <!-- Start screen -->
   <section class="screen" id="screen-start">
     <div class="panel">
-      <div class="big-emoji" aria-hidden="true">🚌✈️🚆</div>
+      <div class="big-emoji" aria-hidden="true">🚌✈️🚆⛴️</div>
       <h1>Dear Passengers</h1>
       <p class="lead">The Safety Journey Game</p>
       <div class="announce">
@@ -208,14 +216,13 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
         journey safe. Complete all three safety checks to earn your Safety Champion badge.
       </div>
       <ol class="rules">
-        <li><strong>Hazard Hunt</strong> – find every hazard in the cabin.</li>
+        <li><strong>Hazard Hunt</strong> – find every hazard on board.</li>
         <li><strong>Safety Briefing Quiz</strong> – answer passenger safety questions.</li>
-        <li><strong>Seatbelt Check</strong> – buckle up every unbuckled passenger.</li>
+        <li><strong>Passenger Drill</strong> – keep every passenger safe (seatbelts, doors or life jackets).</li>
       </ol>
       <p>You have <strong>3 lives ❤️</strong>. Mistakes cost a life – lose them all and the journey ends.</p>
-      <div style="margin-top:16px">
-        <button type="button" class="btn btn-primary" id="startBtn">BOARD NOW</button>
-      </div>
+      <h3 style="margin-top:16px">Choose your journey</h3>
+      <div class="journeys" id="journeys"></div>
       <p class="best" id="bestStart"></p>
     </div>
   </section>
@@ -253,7 +260,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   <!-- Level 3: Seatbelt Check -->
   <section class="screen" id="screen-belt" hidden>
     <div class="panel">
-      <p class="subinfo" id="beltInfo" aria-live="polite">Secured: 0 · Missed: 0</p>
+      <p class="subinfo" id="beltInfo" aria-live="polite">Helped: 0 · Missed: 0</p>
       <p class="seat-row-label">⬆ Front of the vehicle</p>
       <div class="seat-grid" id="seatGrid"></div>
     </div>
@@ -287,7 +294,8 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
         <li>Report smoke, spills and damaged equipment to the crew immediately.</li>
         <li>In an emergency, leave your luggage behind and follow the exit lighting.</li>
       </ul>
-      <button type="button" class="btn btn-primary" id="againBtn">PLAY AGAIN</button>
+      <button type="button" class="btn btn-primary" id="againBtn">NEW JOURNEY</button>
+      <button type="button" class="btn btn-outline" id="replayBtn">REPLAY SAME JOURNEY</button>
     </div>
   </section>
 </main>
@@ -299,47 +307,154 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   'use strict';
 
   /* ---------- Data ---------- */
-  var HAZARDS = [
-    { e: '🧳', l: 'Bag blocking the aisle' },
-    { e: '💧', l: 'Spilled drink on floor' },
-    { e: '🚬', l: 'Passenger smoking' },
-    { e: '🔌', l: 'Exposed electrical wire' },
-    { e: '🚪', l: 'Blocked emergency exit' },
-    { e: '🔥', l: 'Smoke from luggage rack' },
-    { e: '🧸', l: 'Toy left in the aisle' },
-    { e: '🍾', l: 'Loose glass bottle rolling' },
-    { e: '🪟', l: 'Cracked window' },
-    { e: '📦', l: 'Unsecured heavy box overhead' },
-    { e: '🧍', l: 'Standing while vehicle moves' },
-    { e: '🔋', l: 'Overheating power bank' }
-  ];
-  var SAFE = [
+  var COMMON_SAFE = [
     { e: '💺', l: 'Empty seat' },
     { e: '🧯', l: 'Charged fire extinguisher' },
     { e: '🩹', l: 'First aid kit' },
-    { e: '🦺', l: 'Life vest under seat' },
-    { e: '📖', l: 'Safety instruction card' },
     { e: '🚭', l: 'No-smoking sign' },
-    { e: '🔦', l: 'Emergency torch' },
-    { e: '🎫', l: 'Passenger ticket' },
-    { e: '🧑‍✈️', l: 'Crew member on duty' },
     { e: '💡', l: 'Working cabin light' },
-    { e: '🎧', l: 'Headphones in seat pocket' },
-    { e: '🟢', l: 'Lit exit sign' },
     { e: '🧴', l: 'Hand sanitiser' },
     { e: '😴', l: 'Seated passenger resting' },
-    { e: '📱', l: 'Phone in flight mode' },
-    { e: '🛗', l: 'Clear exit path' }
+    { e: '🟢', l: 'Lit exit sign' },
+    { e: '🎧', l: 'Headphones in seat pocket' }
   ];
+
+  // Each journey has its own hazards, extra safe items and its own level 3 drill.
+  var THEMES = {
+    bus: {
+      name: 'City Bus', icon: '🚌', place: 'bus',
+      hazards: [
+        { e: '🧳', l: 'Bag blocking the aisle' },
+        { e: '💧', l: 'Spilled drink on floor' },
+        { e: '🚬', l: 'Passenger smoking' },
+        { e: '🧸', l: 'Toy left in the aisle' },
+        { e: '🪟', l: 'Cracked window' },
+        { e: '📱', l: 'Driver texting while driving' },
+        { e: '🚪', l: 'Emergency door blocked' },
+        { e: '🔥', l: 'Smoke from engine area' },
+        { e: '🍾', l: 'Loose glass bottle rolling' },
+        { e: '🔋', l: 'Overheating power bank' },
+        { e: '🧍', l: 'Standing by the door while moving' }
+      ],
+      safe: [
+        { e: '🔨', l: 'Emergency glass hammer in place' },
+        { e: '🛑', l: 'Working stop button' },
+        { e: '🎫', l: 'Bus ticket' },
+        { e: '🎒', l: 'Backpack under the seat' },
+        { e: '📖', l: 'Safety notice on wall' },
+        { e: '♿', l: 'Priority seat sign' },
+        { e: '🪪', l: 'Driver ID displayed' }
+      ],
+      belt: { title: 'Seatbelt Check', icon: '🔒',
+        text: 'please fasten your seatbelts! Help the driver buckle up every passenger before the bus moves off.',
+        un: ['😟', 'Unbuckled!'], ok: ['😊', 'Buckled'], fixed: ['😃', 'Secured ✓'],
+        tapRule: 'Tap 😟 unbuckled passengers to buckle them (+80).',
+        okRule: 'Tapping a 😊 buckled passenger costs a life ❤️.',
+        wrong: 'Already buckled!', bonusText: 'No passenger left unbuckled' }
+    },
+    plane: {
+      name: 'Flight', icon: '✈️', place: 'aircraft',
+      hazards: [
+        { e: '🧳', l: 'Bag in the aisle during take-off' },
+        { e: '📦', l: 'Overhead bin left open' },
+        { e: '🚬', l: 'Smoking in the lavatory' },
+        { e: '🔋', l: 'Smoking power bank' },
+        { e: '🚪', l: 'Exit row blocked by a bag' },
+        { e: '💧', l: 'Spilled coffee in the aisle' },
+        { e: '🧍', l: 'Standing with seatbelt sign on' },
+        { e: '🪑', l: 'Seat reclined for landing' },
+        { e: '🔥', l: 'Burning smell from galley oven' },
+        { e: '🍾', l: 'Loose bottle under a seat' }
+      ],
+      safe: [
+        { e: '🦺', l: 'Life vest under seat' },
+        { e: '📖', l: 'Safety card in seat pocket' },
+        { e: '🧑‍✈️', l: 'Crew member on duty' },
+        { e: '📱', l: 'Phone in flight mode' },
+        { e: '😷', l: 'Oxygen mask panel closed' },
+        { e: '🎫', l: 'Boarding pass' },
+        { e: '🪟', l: 'Window shade open for landing' }
+      ],
+      belt: { title: 'Fasten Seatbelts', icon: '🔒',
+        text: 'the captain has switched on the seatbelt sign! Help the cabin crew make sure every passenger is buckled up.',
+        un: ['😟', 'Unbuckled!'], ok: ['😊', 'Buckled'], fixed: ['😃', 'Secured ✓'],
+        tapRule: 'Tap 😟 unbuckled passengers to buckle them (+80).',
+        okRule: 'Tapping a 😊 buckled passenger costs a life ❤️.',
+        wrong: 'Already buckled!', bonusText: 'No passenger left unbuckled' }
+    },
+    train: {
+      name: 'Train', icon: '🚆', place: 'train',
+      hazards: [
+        { e: '🧳', l: 'Suitcase blocking the doors' },
+        { e: '🚪', l: 'Door forced open while moving' },
+        { e: '💧', l: 'Spilled drink by the doors' },
+        { e: '🚬', l: 'Smoking in the toilet' },
+        { e: '🧍', l: 'Leaning out of the window' },
+        { e: '🛤️', l: 'Person walking on the tracks' },
+        { e: '🔌', l: 'Exposed electrical wire' },
+        { e: '🧸', l: 'Toy in the gangway' },
+        { e: '🔥', l: 'Smoke under a seat' },
+        { e: '🚲', l: 'Bike blocking the gangway' }
+      ],
+      safe: [
+        { e: '🚨', l: 'Emergency alarm handle' },
+        { e: '🎫', l: 'Train ticket' },
+        { e: '🗺️', l: 'Route map' },
+        { e: '📢', l: 'Announcement speaker' },
+        { e: '🚻', l: 'Toilet sign' },
+        { e: '🔦', l: 'Emergency torch' },
+        { e: '♿', l: 'Priority seat sign' }
+      ],
+      belt: { title: 'Mind the Doors', icon: '🚪',
+        text: 'the doors are about to close! Help the guard move passengers who are leaning on the doors back to safety.',
+        un: ['😟', 'Leaning on doors!'], ok: ['😊', 'Standing clear'], fixed: ['😃', 'Moved clear ✓'],
+        tapRule: 'Tap 😟 passengers leaning on the doors to move them clear (+80).',
+        okRule: 'Tapping a 😊 passenger already standing clear costs a life ❤️.',
+        wrong: 'Already clear!', bonusText: 'Every door kept clear' }
+    },
+    ship: {
+      name: 'Ferry', icon: '⛴️', place: 'ferry',
+      hazards: [
+        { e: '🌊', l: 'Water on the deck' },
+        { e: '🧍', l: 'Sitting on the railing' },
+        { e: '🚬', l: 'Smoking near the fuel store' },
+        { e: '🧳', l: 'Bag blocking the stairs' },
+        { e: '🔥', l: 'Smoke from the engine room' },
+        { e: '🎣', l: 'Fishing line across walkway' },
+        { e: '🍾', l: 'Broken bottle on deck' },
+        { e: '🚪', l: 'Fire door wedged open' },
+        { e: '🧒', l: 'Child alone near the railing' },
+        { e: '🔋', l: 'Overheating power bank' }
+      ],
+      safe: [
+        { e: '🦺', l: 'Life jacket store' },
+        { e: '🛟', l: 'Lifebuoy on its hook' },
+        { e: '🚤', l: 'Lifeboat secured' },
+        { e: '🧭', l: 'Muster station sign' },
+        { e: '📖', l: 'Safety instructions' },
+        { e: '🎫', l: 'Ferry ticket' },
+        { e: '🧑‍✈️', l: 'Crew on deck' },
+        { e: '🔦', l: 'Emergency torch' }
+      ],
+      belt: { title: 'Life Jacket Drill', icon: '🦺',
+        text: 'this is a life jacket drill! Help the crew give a life jacket to every passenger who is not wearing one.',
+        un: ['😟', 'No life jacket!'], ok: ['😊', 'Wearing life jacket'], fixed: ['🦺', 'Life jacket on ✓'],
+        tapRule: 'Tap 😟 passengers without a life jacket to give them one (+80).',
+        okRule: 'Tapping a 😊 passenger already wearing one costs a life ❤️.',
+        wrong: 'Already wearing one!', bonusText: 'Every passenger protected' }
+    }
+  };
+  var THEME_KEYS = ['bus', 'plane', 'train', 'ship'];
   var HAZARD_COUNT = 7;
   var SAFE_COUNT = 13;
 
   // First option is always the correct answer (options are shuffled when shown).
+  // t = journeys the question applies to; no t = every journey.
   var QUESTIONS = [
-    { q: 'Where should cabin bags be stored during the journey?',
-      o: ['In the overhead bin or under the seat in front', 'In the aisle for easy access', 'On your lap', 'Next to the emergency exit'],
+    { q: 'Where should your bags be stored during the journey?',
+      o: ['In the luggage area, overhead rack or under the seat', 'In the aisle for easy access', 'On the seat next to the door', 'Next to the emergency exit'],
       why: 'Bags in aisles or near exits become trip hazards and block evacuation.' },
-    { q: 'When should you wear your seatbelt?',
+    { t: ['bus', 'plane'], q: 'When should you wear your seatbelt?',
       o: ['Whenever you are seated', 'Only during take-off', 'Only when the driver asks', 'Never on short trips'],
       why: 'Sudden braking or turbulence can happen at any time.' },
     { q: 'During an emergency evacuation, what should you do with your luggage?',
@@ -348,65 +463,127 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
     { q: 'What does PASS stand for when using a fire extinguisher?',
       o: ['Pull, Aim, Squeeze, Sweep', 'Push, Alert, Spray, Stop', 'Point, Activate, Shake, Spray', 'Pull, Alarm, Stand, Spray'],
       why: 'Pull the pin, Aim at the base of the fire, Squeeze the handle, Sweep side to side.' },
-    { q: 'You notice smoke coming from the luggage rack. What should you do first?',
-      o: ['Alert the crew immediately', 'Open a window', 'Ignore it, it is probably nothing', 'Record a video of it'],
+    { q: 'You notice smoke coming from a luggage rack. What should you do first?',
+      o: ['Alert the crew or driver immediately', 'Open a window', 'Ignore it, it is probably nothing', 'Record a video of it'],
       why: 'The crew are trained and equipped to handle fires – early reporting saves lives.' },
-    { q: 'The lights along the cabin floor are there to…',
+    { t: ['plane'], q: 'The lights along the cabin floor are there to…',
       o: ['Guide you to the emergency exits', 'Decorate the cabin', 'Help you find lost items', 'Show where to stand'],
       why: 'In smoke or darkness, floor-path lighting leads you to the nearest exit.' },
-    { q: 'On an aircraft, when should you inflate your life vest?',
+    { t: ['plane'], q: 'On an aircraft, when should you inflate your life vest?',
       o: ['As you leave the aircraft', 'As soon as you put it on', 'While still in your seat', 'Before take-off'],
       why: 'An inflated vest inside the cabin can trap you if the cabin fills with water.' },
-    { q: 'Oxygen masks drop down. Whose mask do you put on first?',
+    { t: ['plane'], q: 'Oxygen masks drop down. Whose mask do you put on first?',
       o: ['Your own, then help others', 'Your child’s first', 'The person next to you', 'Wait for the crew to help'],
       why: 'You cannot help anyone if you lose consciousness first.' },
-    { q: 'You see a spilled drink in the aisle. What is the safest action?',
+    { q: 'You see a spilled drink in the walkway. What is the safest action?',
       o: ['Warn others and report it to the crew', 'Step over it and carry on', 'Ignore it, it will dry', 'Cover it with a newspaper'],
       why: 'Wet floors are a leading cause of slips and falls.' },
-    { q: 'What is the purpose of the brace position?',
+    { t: ['plane'], q: 'What is the purpose of the brace position?',
       o: ['To reduce injury during an impact', 'To sleep more comfortably', 'To stretch your back', 'To see out of the window'],
       why: 'Bracing protects your head and limbs from sudden forces.' },
-    { q: 'Who should sit in an emergency exit row?',
+    { t: ['plane'], q: 'Who should sit in an emergency exit row?',
       o: ['Able adults willing to assist in an emergency', 'Young children', 'Passengers with the most luggage', 'Anyone who wants extra legroom'],
       why: 'Exit-row passengers may need to open the exit and help others out.' },
-    { q: 'Where should you stand while waiting for a train?',
+    { t: ['train'], q: 'Where should you stand while waiting for a train?',
       o: ['Behind the yellow safety line', 'Right at the platform edge', 'On the tracks if the train is late', 'Anywhere on the platform'],
       why: 'Passing trains create strong air pressure that can pull you in.' },
-    { q: 'Is it safe to lean out of the window of a moving bus or train?',
+    { t: ['bus', 'train'], q: 'Is it safe to lean out of the window of a moving bus or train?',
       o: ['No, never', 'Yes, if you hold on tightly', 'Only on straight roads', 'Only at low speed'],
       why: 'Poles, signs and passing vehicles can cause serious injury.' },
-    { q: 'When is the best time to read the safety instruction card?',
+    { q: 'When is the best time to read the safety information?',
       o: ['Before the journey starts', 'Only during an emergency', 'After the journey ends', 'There is no need to read it'],
       why: 'In an emergency there is no time to learn – know your exits in advance.' },
-    { q: 'The cabin fills with smoke. How should you move to the exit?',
-      o: ['Stay low and follow the floor lighting', 'Stand tall to see better', 'Run as fast as you can', 'Stay in your seat and wait'],
-      why: 'Cleaner air is closer to the floor and the lighting shows the way out.' },
+    { q: 'The area fills with smoke. How should you move to the exit?',
+      o: ['Stay low and follow the exit signs', 'Stand tall to see better', 'Run as fast as you can', 'Stay in your seat and wait'],
+      why: 'Cleaner air is closer to the floor, and the signs show the way out.' },
     { q: 'Your power bank becomes very hot during the journey. What should you do?',
-      o: ['Stop using it and tell the crew', 'Put it in the overhead bin', 'Keep charging your phone', 'Cover it with a blanket'],
-      why: 'Overheating lithium batteries can catch fire and need crew attention.' }
+      o: ['Stop using it and tell the crew', 'Put it in a luggage rack', 'Keep charging your phone', 'Cover it with a blanket'],
+      why: 'Overheating lithium batteries can catch fire and need crew attention.' },
+    { q: 'A fellow passenger suddenly faints. What should you do first?',
+      o: ['Alert the crew or driver and call for help', 'Pour water on their face', 'Leave them to rest', 'Take a photo for proof'],
+      why: 'Trained staff and first aid equipment can reach them quickly if you raise the alarm.' },
+    { q: 'Why should you find your nearest exit as soon as you board?',
+      o: ['So you can reach it quickly, even in the dark', 'To get off first at the end', 'To find a quieter seat', 'There is no reason to'],
+      why: 'Knowing your exit in advance saves vital seconds in an emergency.' },
+    { t: ['bus'], q: 'The bus is moving and your stop is next. What should you do?',
+      o: ['Stay seated or hold a handrail until it stops', 'Stand by the door early', 'Walk to the front while it moves', 'Ask the driver to open the door now'],
+      why: 'Sudden braking can throw standing passengers off balance.' },
+    { t: ['bus'], q: 'What is the red hammer next to some bus windows for?',
+      o: ['Breaking the window to escape in an emergency', 'Fixing loose seats', 'Signalling the driver', 'Decoration'],
+      why: 'Emergency hammers let passengers escape if the doors cannot be used.' },
+    { t: ['bus'], q: 'Where is the safest place to cross the road after getting off a bus?',
+      o: ['At a crossing, after the bus has pulled away', 'Directly in front of the bus', 'Directly behind the bus', 'Anywhere, as long as you run'],
+      why: 'Drivers cannot see you around a stopped bus, and you cannot see them.' },
+    { t: ['bus'], q: 'The bus driver is texting while driving. What should you do?',
+      o: ['Report it to the bus company', 'Ignore it', 'Start a conversation with the driver', 'Stand next to the driver to watch'],
+      why: 'A distracted driver puts every passenger at risk – reporting helps fix it.' },
+    { t: ['plane'], q: 'The seatbelt sign is on but you want to use the toilet. What should you do?',
+      o: ['Stay seated until the sign goes off, unless it is urgent', 'Go anyway, it is quick', 'Stand in the aisle and wait', 'Unbuckle and walk fast'],
+      why: 'Turbulence can strike without warning and injure people who are standing.' },
+    { t: ['plane'], q: 'Why are window shades opened for take-off and landing?',
+      o: ['So people can see outside hazards in an emergency', 'To let in sunlight', 'To keep the cabin warm', 'For better photos'],
+      why: 'Crew and passengers need to judge which side is safe to evacuate.' },
+    { t: ['plane'], q: 'How should your seat back be set during take-off and landing?',
+      o: ['Upright', 'Fully reclined', 'Halfway reclined', 'It does not matter'],
+      why: 'A reclined seat blocks the passenger behind you during an evacuation.' },
+    { t: ['plane'], q: 'Where might your nearest exit be on an aircraft?',
+      o: ['It could be behind you – count the rows to it', 'Always at the front', 'Always at the back', 'Only the door you boarded through'],
+      why: 'The closest exit is often behind you; counting rows helps in smoke or darkness.' },
+    { t: ['train'], q: 'The train doors are beeping and starting to close. What should you do?',
+      o: ['Wait for the next train', 'Push your bag between the doors', 'Jump through quickly', 'Hold the doors open'],
+      why: 'Closing doors can trap limbs and bags, and the train may start to move.' },
+    { t: ['train'], q: 'You drop your phone onto the tracks. What should you do?',
+      o: ['Tell station staff and never go onto the tracks', 'Climb down quickly before a train comes', 'Reach for it with your umbrella', 'Ask a friend to hold you while you climb down'],
+      why: 'Tracks can carry live electricity and trains move faster than they look.' },
+    { t: ['train'], q: 'When should you pull the emergency alarm on a train?',
+      o: ['Only in a real emergency, such as illness or fire', 'When you miss your stop', 'To ask the driver for directions', 'To open the doors early'],
+      why: 'Misusing the alarm can delay help to people who really need it.' },
+    { t: ['train'], q: 'What does "Mind the gap" warn you about?',
+      o: ['The space between the train and the platform', 'A gap in the timetable', 'A gap between carriages to stand in', 'Empty seats'],
+      why: 'Feet and bags can slip into the gap when getting on or off.' },
+    { t: ['ship'], q: 'Where should you go when the ship’s general emergency alarm sounds?',
+      o: ['Your assigned muster station', 'Your cabin to pack', 'The ship’s café', 'The lowest deck'],
+      why: 'The crew count passengers and hand out equipment at the muster stations.' },
+    { t: ['ship'], q: 'What is the general emergency alarm signal on a ship?',
+      o: ['Seven short blasts followed by one long blast', 'One long blast', 'Three short blasts', 'A continuous bell for one minute'],
+      why: 'Seven short and one long blast means go to your muster station.' },
+    { t: ['ship'], q: 'Is it safe to sit on the ship’s railing for a photo?',
+      o: ['No, never', 'Yes, in calm weather', 'Yes, if someone holds you', 'Only when docked'],
+      why: 'A sudden wave or roll of the ship can throw you overboard.' },
+    { t: ['ship'], q: 'Someone falls overboard. What should you do?',
+      o: ['Shout "Man overboard!", throw a lifebuoy and keep pointing at them', 'Jump in to rescue them', 'Run to find a camera', 'Wait to see if they swim back'],
+      why: 'Raising the alarm and keeping sight of the person gives them the best chance.' },
+    { t: ['ship'], q: 'When should you put on your life jacket in a ship emergency?',
+      o: ['When the crew tell you to, or at your muster station', 'Only once you are in the water', 'Never, it is uncomfortable', 'Only if you cannot swim'],
+      why: 'Follow crew instructions – a life jacket is hard to put on in the water.' }
   ];
   var QUIZ_COUNT = 6;
+  var RECENT_Q_KEY = 'dearPassengersRecentQuestions';
+  var LAST_THEME_KEY = 'dearPassengersLastJourney';
 
-  var LEVELS = [
-    { name: 'Level 1 · Hazard Hunt', icon: '🔍',
-      text: '📢 <strong>Dear Passengers,</strong> our crew needs sharp eyes! Inspect the cabin and tap every <strong>hazard</strong> before we depart.',
-      rules: ['Tap all 7 hazards within 30 seconds (+100 each).', 'Tapping a safe item costs a life ❤️.', 'Finish early to earn a time bonus.'],
-      screen: 'hazard', start: startHazard },
-    { name: 'Level 2 · Safety Briefing Quiz', icon: '📋',
-      text: '📢 <strong>Dear Passengers,</strong> please pay attention to the safety briefing. Answer each question before the timer runs out.',
-      rules: ['6 questions, 15 seconds each.', 'Correct answer: +150 plus a speed bonus.', 'Wrong answer or timeout costs a life ❤️.', 'Tip: use keys 1–4 to answer and Enter for next.'],
-      screen: 'quiz', start: startQuiz },
-    { name: 'Level 3 · Seatbelt Check', icon: '🔒',
-      text: '📢 <strong>Dear Passengers,</strong> please fasten your seatbelts! Help the crew buckle up every passenger before they leave the seat.',
-      rules: ['Tap 😟 unbuckled passengers to buckle them (+80).', 'Tapping a 😊 buckled passenger costs a life ❤️.', 'A missed unbuckled passenger costs 30 points.', 'Survive 30 seconds – it gets faster!'],
-      screen: 'belt', start: startBelt }
-  ];
+  function buildLevels(th) {
+    var b = th.belt;
+    return [
+      { name: 'Level 1 · Hazard Hunt', icon: '🔍',
+        text: '📢 <strong>Dear Passengers,</strong> our crew needs sharp eyes! Inspect the ' + th.place + ' and tap every <strong>hazard</strong> before we depart.',
+        rules: ['Tap all ' + HAZARD_COUNT + ' hazards within 30 seconds (+100 each).', 'Tapping a safe item costs a life ❤️.', 'Finish early to earn a time bonus.'],
+        start: startHazard },
+      { name: 'Level 2 · Safety Briefing Quiz', icon: '📋',
+        text: '📢 <strong>Dear Passengers,</strong> please pay attention to the ' + th.place + ' safety briefing. Answer each question before the timer runs out.',
+        rules: [QUIZ_COUNT + ' questions, 15 seconds each.', 'Correct answer: +150 plus a speed bonus.', 'Wrong answer or timeout costs a life ❤️.', 'Tip: use keys 1–4 to answer and Enter for next.'],
+        start: startQuiz },
+      { name: 'Level 3 · ' + b.title, icon: b.icon,
+        text: '📢 <strong>Dear Passengers,</strong> ' + b.text,
+        rules: [b.tapRule, b.okRule, 'Each one you miss costs 30 points.', 'Last 30 seconds – it gets faster!'],
+        start: startBelt }
+    ];
+  }
 
   var BEST_KEY = 'dearPassengersBestScore';
   var MAX_LIVES = 3;
 
   /* ---------- State & helpers ---------- */
-  var state = { score: 0, lives: MAX_LIVES, level: 0, playing: false, timers: [], muted: false };
+  var state = { score: 0, lives: MAX_LIVES, level: 0, playing: false, timers: [], muted: false, themeKey: 'bus', theme: THEMES.bus, levels: [] };
 
   function $(id) { return document.getElementById(id); }
   function later(fn, ms) { var id = setTimeout(fn, ms); state.timers.push({ k: 't', id: id }); return id; }
@@ -446,7 +623,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
     for (var i = 0; i < MAX_LIVES; i++) hearts += (i < state.lives ? '❤️' : '🖤');
     $('hudLives').textContent = hearts;
     $('hudLives').setAttribute('aria-label', 'Lives: ' + state.lives + ' of ' + MAX_LIVES);
-    $('hudLevel').textContent = LEVELS[state.level] ? LEVELS[state.level].name : '';
+    $('hudLevel').textContent = state.levels[state.level] ? (state.theme.icon + ' ' + state.levels[state.level].name) : '';
   }
 
   function addScore(n) {
@@ -526,8 +703,22 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   }
 
   /* ---------- Flow ---------- */
-  function startGame() {
+  function pickTheme(key) {
+    if (!THEMES[key]) {
+      var last = '';
+      try { last = localStorage.getItem(LAST_THEME_KEY) || ''; } catch (e) { /* ignore */ }
+      var options = THEME_KEYS.filter(function (k) { return k !== last; });
+      key = options[Math.floor(Math.random() * options.length)];
+    }
+    try { localStorage.setItem(LAST_THEME_KEY, key); } catch (e) { /* ignore */ }
+    return key;
+  }
+
+  function startGame(key) {
     clearTimers();
+    state.themeKey = pickTheme(key);
+    state.theme = THEMES[state.themeKey];
+    state.levels = buildLevels(state.theme);
     state.score = 0; state.lives = MAX_LIVES; state.level = 0; state.playing = false;
     renderHud();
     showIntro(0);
@@ -536,7 +727,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   function showIntro(i) {
     state.level = i;
     renderHud();
-    var L = LEVELS[i];
+    var L = state.levels[i];
     $('introIcon').textContent = L.icon;
     $('introTitle').textContent = L.name;
     $('introText').innerHTML = L.text;
@@ -560,8 +751,8 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
     clearTimers();
     if (bonus > 0) addScore(bonus);
     sfx('win');
-    var last = state.level >= LEVELS.length - 1;
-    $('leTitle').textContent = LEVELS[state.level].name.split('·')[1].trim() + ' complete!';
+    var last = state.level >= state.levels.length - 1;
+    $('leTitle').textContent = state.levels[state.level].name.split('·')[1].trim() + ' complete!';
     $('leSummary').textContent = summary;
     $('leBonus').textContent = bonus > 0 ? ('🎁 ' + (bonusText || 'Bonus') + ': +' + bonus) : '';
     $('leScore').textContent = state.score;
@@ -571,7 +762,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   }
 
   function nextFromLevelEnd() {
-    if (state.level >= LEVELS.length - 1) finish(true);
+    if (state.level >= state.levels.length - 1) finish(true);
     else showIntro(state.level + 1);
   }
 
@@ -597,7 +788,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
 
     $('finIcon').textContent = completed ? '🏆' : '🚧';
     $('finTitle').textContent = completed ? 'Journey complete – thank you, Dear Passenger!' : 'Journey interrupted – out of lives!';
-    $('finRank').textContent = 'Your rank: ' + rank;
+    $('finRank').textContent = state.theme.icon + ' ' + state.theme.name + ' · Your rank: ' + rank;
     $('finStars').textContent = '⭐'.repeat(stars) + '☆'.repeat(3 - stars);
     $('finStars').setAttribute('aria-label', stars + ' of 3 stars');
     $('finScore').textContent = state.score;
@@ -608,11 +799,21 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   }
 
   /* ---------- Level 1: Hazard Hunt ---------- */
+  // Safe items never share an emoji or label with this journey's hazards.
+  function safePool() {
+    var used = {};
+    state.theme.hazards.forEach(function (h) { used[h.e] = true; used[h.l] = true; });
+    var out = [];
+    shuffle(state.theme.safe.concat(COMMON_SAFE)).forEach(function (s) {
+      if (!used[s.e] && !used[s.l]) { used[s.e] = true; used[s.l] = true; out.push(s); }
+    });
+    return out;
+  }
   function startHazard() {
     beginLevel();
     var items = shuffle(
-      shuffle(HAZARDS).slice(0, HAZARD_COUNT).map(function (h) { return { e: h.e, l: h.l, haz: true }; })
-        .concat(shuffle(SAFE).slice(0, SAFE_COUNT).map(function (s) { return { e: s.e, l: s.l, haz: false }; }))
+      shuffle(state.theme.hazards).slice(0, HAZARD_COUNT).map(function (h) { return { e: h.e, l: h.l, haz: true }; })
+        .concat(safePool().slice(0, SAFE_COUNT).map(function (s) { return { e: s.e, l: s.l, haz: false }; }))
     );
     var found = 0;
     var grid = $('hazardGrid');
@@ -675,9 +876,23 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
 
   /* ---------- Level 2: Quiz ---------- */
   var quiz = null;
+  // Prefer questions for this journey that were not asked in recent games.
+  function pickQuestions() {
+    var key = state.themeKey;
+    var pool = QUESTIONS.filter(function (q) { return !q.t || q.t.indexOf(key) !== -1; });
+    var recent = [];
+    try { recent = JSON.parse(localStorage.getItem(RECENT_Q_KEY) || '[]'); } catch (e) { recent = []; }
+    if (!Array.isArray(recent)) recent = [];
+    var fresh = shuffle(pool.filter(function (q) { return recent.indexOf(q.q) === -1; }));
+    var seen = shuffle(pool.filter(function (q) { return recent.indexOf(q.q) !== -1; }));
+    var picked = fresh.concat(seen).slice(0, QUIZ_COUNT);
+    recent = picked.map(function (q) { return q.q; }).concat(recent).slice(0, 18);
+    try { localStorage.setItem(RECENT_Q_KEY, JSON.stringify(recent)); } catch (e) { /* ignore */ }
+    return picked;
+  }
   function startQuiz() {
     beginLevel();
-    quiz = { qs: shuffle(QUESTIONS).slice(0, QUIZ_COUNT), i: 0, correct: 0, answered: false, buttons: [], timer: null };
+    quiz = { qs: pickQuestions(), i: 0, correct: 0, answered: false, buttons: [], timer: null };
     show('quiz');
     askQuestion();
   }
@@ -758,15 +973,10 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
   }
 
   /* ---------- Level 3: Seatbelt Check ---------- */
-  var SEAT_VIEW = {
-    empty: ['💺', 'Empty seat'],
-    un: ['😟', 'Unbuckled!'],
-    ok: ['😊', 'Buckled'],
-    fixed: ['😃', 'Secured ✓']
-  };
-
   function startBelt() {
     beginLevel();
+    var bt = state.theme.belt;
+    var SEAT_VIEW = { empty: ['💺', 'Empty seat'], un: bt.un, ok: bt.ok, fixed: bt.fixed };
     var DURATION = 30;
     var grid = $('seatGrid');
     var info = $('beltInfo');
@@ -775,7 +985,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
     var t0 = performance.now();
     grid.innerHTML = '';
 
-    function updateInfo() { info.textContent = 'Secured: ' + secured + ' · Missed: ' + missed; }
+    function updateInfo() { info.textContent = 'Helped: ' + secured + ' · Missed: ' + missed; }
     function setSeat(s, st) {
       s.st = st;
       s.b.className = 'seat ' + st;
@@ -837,7 +1047,7 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
       } else if (seat.st === 'ok') {
         clearSeatTimer(seat);
         setSeat(seat, 'empty');
-        floater(seat.b, 'Already buckled!', 'bad');
+        floater(seat.b, bt.wrong, 'bad');
         sfx('bad');
         loseLife();
       }
@@ -847,16 +1057,33 @@ footer.foot { text-align: center; color: var(--muted); font-size: 13px; padding:
       seats.forEach(function (x) { x.b.disabled = true; if (x.st === 'un') missed++; });
       updateInfo();
       var bonus = missed === 0 && secured > 0 ? 300 : 0;
-      endLevel(bonus, 'You secured ' + secured + ' passengers and missed ' + missed + '.', 'No passenger left unbuckled');
+      endLevel(bonus, 'You helped ' + secured + ' passengers and missed ' + missed + '.', bt.bonusText);
     });
     show('belt');
     later(spawn, 400);
   }
 
   /* ---------- Wiring ---------- */
-  $('startBtn').addEventListener('click', function () { sfx('click'); startGame(); });
-  $('againBtn').addEventListener('click', function () { sfx('click'); startGame(); });
-  $('introGo').addEventListener('click', function () { sfx('click'); LEVELS[state.level].start(); });
+  THEME_KEYS.concat(['random']).forEach(function (k) {
+    var th = THEMES[k];
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'journey' + (th ? '' : ' surprise');
+    b.innerHTML = '<span class="emo" aria-hidden="true"></span><span></span>';
+    b.firstChild.textContent = th ? th.icon : '🎲';
+    b.lastChild.textContent = th ? th.name : 'Surprise me';
+    b.setAttribute('aria-label', 'Board: ' + (th ? th.name : 'random journey'));
+    b.addEventListener('click', function () { sfx('click'); startGame(k); });
+    $('journeys').appendChild(b);
+  });
+  $('againBtn').addEventListener('click', function () {
+    sfx('click');
+    var best = getBest();
+    $('bestStart').textContent = best > 0 ? ('🏅 Best score: ' + best) : '';
+    show('start');
+  });
+  $('replayBtn').addEventListener('click', function () { sfx('click'); startGame(state.themeKey); });
+  $('introGo').addEventListener('click', function () { sfx('click'); state.levels[state.level].start(); });
   $('leNext').addEventListener('click', function () { sfx('click'); nextFromLevelEnd(); });
   $('qNext').addEventListener('click', nextQuestion);
   $('muteBtn').addEventListener('click', function () {
