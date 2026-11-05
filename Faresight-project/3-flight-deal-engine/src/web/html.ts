@@ -55,8 +55,9 @@ input[type=text],input[type=email],input[type=password],input[type=tel],input[ty
 .lv-deal{background:#cdebd5}.lv-low{background:#e6f4ea}.lv-mid{background:color-mix(in srgb,var(--line) 60%,var(--card))}.lv-high{background:#f7dede}
 @media (prefers-color-scheme:dark){.lv-deal{background:#1e4a2b}.lv-low{background:#233a2a}.lv-high{background:#4a2626}}
 .legend span{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:middle;margin:0 4px 0 12px}
+.stars{color:#b7791f;letter-spacing:1px}.card .hotel-area{color:var(--quiet);font-size:14px;margin:0}.hotel-img{width:100%;max-height:260px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
 @media (max-width:600px){th,td{padding:8px;font-size:14px}header{gap:8px}.cal .d{min-height:36px}}
-</style></head><body><header><a class="brand" href="/">${esc(config.siteName)}</a><nav>${opts.admin ? '<a href="/admin">Admin</a> · ' : ''}<a href="/">Live deals</a> · <a href="/explore">Explore</a> · <a class="cta" href="/alerts">Get free alerts</a> · ${who}</nav></header>
+</style></head><body><header><a class="brand" href="/">${esc(config.siteName)}</a><nav>${opts.admin ? '<a href="/admin">Admin</a> · ' : ''}<a href="/">Live deals</a> · <a href="/explore">Explore</a> · <a href="/hotels">Hotels</a> · <a class="cta" href="/alerts">Get free alerts</a> · ${who}</nav></header>
 <main>${body}</main><footer>Every deal is re-checked every few hours. "Normally" is the median price for that route and season over the last 30 days. Prices can change at any moment; the booking site shows the final price. <a href="/expired">Expired deals</a></footer>
 <script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))</script></body></html>`;
 }
@@ -70,4 +71,17 @@ export function dealCard(d: any) {
   <div class="price">${money(d.price, d.currency)}</div>
   <div><span class="norm">normally ${money(d.normal_price, d.currency)}</span> · <span class="save">${d.saving_pct}% below</span></div>
   <div class="meta">${esc(window)} · ${d.pairs} date pairs · verified ${ago(d.last_verified)}</div></a>`;
+}
+
+/** Card for a hotel deal (row from src/web/hotels/data.ts HOTEL_DEAL_SQL). */
+export function hotelDealCard(d: any) {
+  const window = d.first_date ? (monthYear(d.first_date) === monthYear(d.last_date) ? monthYear(d.first_date) : `${monthYear(d.first_date)} – ${monthYear(d.last_date)}`) : '';
+  const stars = d.stars ? `<span class="stars" aria-label="${esc(d.stars)} star">${'★'.repeat(Math.min(5, Math.max(0, Number(d.stars) || 0)))}</span>` : '';
+  const rating = d.rating != null ? `${esc(Number(d.rating).toFixed(1))}/10` : '';
+  return `<a class="card" href="/hotel-deal/${esc(d.id)}">
+  <h2>${esc(d.name)}</h2>
+  <p class="hotel-area">${[stars, rating, esc([d.area, d.city_name].filter(Boolean).join(', '))].filter(Boolean).join(' · ')}</p>
+  <div class="price">${money(d.per_night, d.currency)}<span class="meta"> / night</span></div>
+  <div><span class="norm">normally ${money(d.normal_per_night, d.currency)}</span> · <span class="save">${Math.round(d.saving_pct)}% below</span></div>
+  <div class="meta">${window ? `Check-in ${esc(window)} · ` : ''}${d.dates ?? 0} date${d.dates === 1 ? '' : 's'} · verified ${ago(d.last_verified)}</div></a>`;
 }

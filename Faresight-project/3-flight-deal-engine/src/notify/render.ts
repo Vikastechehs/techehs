@@ -5,12 +5,16 @@ import type { OutChannel } from './outbox.ts';
 import { unsubscribeToken } from './unsubscribe.ts';
 
 export type NoticeKind = 'deal_live' | 'route_watch' | 'deal_ended';
+export type HotelNoticeKind = 'hotel_live' | 'hotel_ended';
+/** Anything that can appear in a digest: flight notices (d = dealSummary) and hotel notices (d = hotelDealSummary). */
+export type DigestKind = NoticeKind | HotelNoticeKind;
 /** Where a message goes: the channel row (id, owner and kind). */
 export interface Target { id: number; user_id: number; kind: OutChannel }
 /** Rendered message, ready for enqueue(). Email HTML and the push payload travel in meta / body. */
 export interface Rendered { subject: string; body: string; meta: Record<string, unknown> }
 
 export const dealUrl = (dealId: number) => `${config.publicUrl}/deal/${dealId}`;
+export const hotelDealUrl = (hotelDealId: number) => `${config.publicUrl}/hotel-deal/${hotelDealId}`;
 export const unsubscribeUrl = (userId: number, channelId: number) =>
   `${config.publicUrl}/unsubscribe?t=${encodeURIComponent(unsubscribeToken(userId, channelId))}`;
 
@@ -63,16 +67,63 @@ export function renderNotice(kind: NoticeKind, d: any, ch: Target): Rendered {
   return finish(ch, title, lines, dealUrl(d.id), `deal-${d.id}`);
 }
 
-/** One digest message grouping several notices for a daily channel. */
-export function renderDigest(items: { kind: NoticeKind; d: any }[], ch: Target): Rendered {
-  const live = items.filter(i => i.kind !== 'deal_ended').length;
-  const title = live
-    ? `${live} flight deal${live === 1 ? '' : 's'} for you today`
-    : `Update on ${items.length} deal${items.length === 1 ? '' : 's'} you were following`;
+/** One digest message grouping several notices (flights and hotels) for a daily channel. */
+export function renderDigest(items: { kind: DigestKind; d: any }[], ch: Target): Rendered {
+  const isHotel = (k: DigestKind) => k === 'hotel_live' || k === 'hotel_ended';
+  const flights = items.filter(i => i.kind !== 'deal_ended' && !isHotel(i.kind)).length;
+  const hotels = items.filter(i => i.kind === 'hotel_live').length;
+  const n = (k: number, what: string) => `${k} ${what}${k === 1 ? '' : 's'}`;
+  const title = flights || hotels
+    ? `${[flights ? n(flights, 'flight deal') : '', hotels ? n(hotels, 'hotel deal') : ''].filter(Boolean).join(' and ')} for you today`
+    : `Update on ${n(items.length, 'deal')} you were following`;
   const lines: string[] = [];
   for (const { kind, d } of items) {
+    const link = ch.kind === 'push' ? '' : isHotel(kind) ? hotelDealUrl(d.id) : dealUrl(d.id);
     if (kind === 'deal_ended') lines.push(`• Ended: ${route(d)}. ${endedReason(d)}`);
-    else lines.push(`• ${route(d)}: ${money(d.price, d.currency)} (normally ${money(d.normal_price, d.currency)}, ${pct(d.saving_pct)} below) ${ch.kind === 'push' ? '' : dealUrl(d.id)}`.trimEnd());
+    else if (kind === 'hotel_ended') lines.push(`• Ended: ${hotelPlace(d)}. ${hotelEndedReason(d)}`);
+    else if (kind === 'hotel_live') lines.push(`• 🏨 ${hotelPlace(d)}: ${money(d.per_night, d.currency)}/night (normally ${money(d.normal_per_night, d.currency)}, ${pct(d.saving_pct)} below) ${link}`.trimEnd());
+    else lines.push(`• ${route(d)}: ${money(d.price, d.currency)} (normally ${money(d.normal_price, d.currency)}, ${pct(d.saving_pct)} below) ${link}`.trimEnd());
   }
-  return finish(ch, title, [title, ...lines], items.length === 1 ? dealUrl(items[0].d.id) : `${config.publicUrl}/`, 'digest');
+  const only = items.length === 1 ? (isHotel(items[0].kind) ? hotelDealUrl(items[0].d.id) : dealUrl(items[0].d.id)) : `${config.publicUrl}/`;
+  return finish(ch, title, [title, ...lines], only, 'digest');
+}
+
+// --- Hotels ---
+const stars = (n: unknown) => Number(n) >= 1 ? ' ' + '★'.repeat(Math.min(5, Math.round(Number(n)))) : '';
+const hotelPlace = (d: any) => `${d.hotel_name}, ${d.city_name}`;
+const monthName = (s: string) => new Date(String(s).slice(0, 10) + 'T00:00:00Z').toLocaleString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/** Plain-language reason a hotel deal ended, from hotel_deals.reason. */
+export function hotelEndedReason(d: any): string {
+  const r = String(d.reason ?? '');
+  const rose = /price rose to ([\d.]+)/i.exec(r);
+  if (rose) return `The rate rose to ${money(Number(rose[1]), d.currency)} a night.`;
+  if (/no (rooms|rates|offers|availability)|sold out|not found/i.test(r)) return 'No rooms were left at this rate when we re-checked.';
+  if (/all dates passed|dates passed/i.test(r)) return 'All the stay dates have passed.';
+  if (/rejected by admin/i.test(r)) return 'We withdrew this deal after a manual check.';
+  return r ? r.charAt(0).toUpperCase() + r.slice(1) + (r.endsWith('.') ? '' : '.') : 'The rate is no longer available.';
+}
+
+/** The text of a live hotel deal: name, stars and city; price; dates; (the link is added by finish). */
+export function hotelDealText(d: any): string[] {
+  const first = d.first_checkin ?? null, last = d.last_checkin ?? null;
+  const window = first && last && monthName(first) !== monthName(last) ? `${monthName(first)} – ${monthName(last)}`
+    : first ? monthName(first) : d.month ? monthName(d.month instanceof Date ? d.month.toISOString() : String(d.month)) : '';
+  const dates = Number(d.dates ?? 0);
+  return [
+    `🏨 ${d.hotel_name}${stars(d.stars)} · ${d.city_name}`,
+    `${money(d.per_night, d.currency)}/night · normally ${money(d.normal_per_night, d.currency)} · ${pct(d.saving_pct)} below`,
+    [window, dates ? `${dates} date${dates === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · '),
+  ].filter(l => l.trim());
+}
+
+export function hotelNoticeLines(kind: HotelNoticeKind, d: any): { title: string; lines: string[] } {
+  if (kind === 'hotel_ended') return { title: `Ended: ${hotelPlace(d)}`, lines: [`Ended: ${hotelPlace(d)}. ${hotelEndedReason(d)}`] };
+  return { title: `${pct(d.saving_pct)} below normal: ${hotelPlace(d)} from ${money(d.per_night, d.currency)}/night`, lines: hotelDealText(d) };
+}
+
+/** A single hotel notice (live or ended) for one channel. `d` is hotelDealSummary() from notify/hotels.ts. */
+export function renderHotelNotice(kind: HotelNoticeKind, d: any, ch: Target): Rendered {
+  const { title, lines } = hotelNoticeLines(kind, d);
+  return finish(ch, title, lines, hotelDealUrl(d.id), `hotel-deal-${d.id}`);
 }

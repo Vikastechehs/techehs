@@ -22,6 +22,8 @@ export interface Alert { id: number; origin: string; city: string; min_saving_pc
 export interface Channel { id: number; kind: 'email' | 'telegram' | 'whatsapp' | 'push'; address: string; frequency: 'instant' | 'daily'; verified_at: string | null; active: boolean; created_at: string }
 export interface Watch { id: number; route_id: number; origin: string; destination: string; from_city: string; to_city: string; max_price: number | null; live_deal_id: number | null; live_price: number | null; created_at: string }
 export interface SavedDeal { deal_id: number; origin: string; destination: string; from_city: string; to_city: string; price: number; normal_price: number; saving_pct: number; currency: string; status: string; saved_at: string }
+export interface HotelAlert { id: number; city: string; city_name: string; min_saving_pct: number; max_per_night: number | null; min_stars: number | null; active: boolean; created_at: string }
+export interface SavedHotelDeal { hotel_deal_id: number; hotel_name: string; city: string; city_name: string; stars: number | null; per_night: number; normal_per_night: number; saving_pct: number; currency: string; status: string; saved_at: string }
 export type ProfilePatch = Partial<Pick<User, 'name' | 'phone' | 'home_airport' | 'locale' | 'marketing_consent'>>;
 
 /** Validation problems throw this; the message is safe to show to the user. */
@@ -343,6 +345,61 @@ export async function unsaveDeal(db: Db, userId: number, dealId: number): Promis
   await db.query(`DELETE FROM saved_deals WHERE user_id = $1 AND deal_id = $2`, [userId, dealId]);
 }
 
+// --- Hotel alerts: "tell me about hotel deals in Bangkok at least 35% below normal" ---
+const HOTEL_ALERT_SQL = `SELECT s.id, s.city, c.name AS city_name, s.min_saving_pct, s.max_per_night, s.min_stars, s.active, s.created_at
+  FROM hotel_alert_subscriptions s JOIN hotel_cities c ON c.code = s.city WHERE s.user_id = $1`;
+const cityCode = (v: unknown) => String(v ?? '').trim().toUpperCase();
+export async function listHotelAlerts(db: Db, userId: number): Promise<HotelAlert[]> {
+  return plainAll<HotelAlert>(await db.query(`${HOTEL_ALERT_SQL} ORDER BY c.name`, [userId]));
+}
+export async function upsertHotelAlert(db: Db, userId: number, a: { city: string; min_saving_pct?: number; max_per_night?: number | null; min_stars?: number | null; active?: boolean }): Promise<HotelAlert> {
+  const city = cityCode(a?.city);
+  if (!city || city.length > 10 || !(await db.query(`SELECT 1 FROM hotel_cities WHERE code = $1 AND active`, [city])).length)
+    throw new UserError('We don\'t track hotel deals in that city yet');
+  const [old] = await db.query(`SELECT * FROM hotel_alert_subscriptions WHERE user_id = $1 AND city = $2`, [userId, city]);
+  const pct = a.min_saving_pct === undefined ? (old?.min_saving_pct ?? 25) : Number(a.min_saving_pct);
+  if (!Number.isInteger(pct) || pct < 25 || pct > 90) throw new UserError('Minimum saving must be a whole number from 25 to 90');
+  let maxPerNight: number | null;
+  if (a.max_per_night === undefined) maxPerNight = old?.max_per_night ?? null;
+  else {
+    try { maxPerNight = optPrice(a.max_per_night); } catch { throw new UserError('Max price per night must be a positive number'); }
+  }
+  let stars: number | null;
+  if (a.min_stars === undefined) stars = old?.min_stars ?? null;
+  else if (a.min_stars == null || (a.min_stars as unknown) === '') stars = null;
+  else {
+    stars = Number(a.min_stars);
+    if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw new UserError('Minimum stars must be a whole number from 1 to 5');
+  }
+  const active = a.active === undefined ? (old?.active ?? true) : a.active;
+  if (typeof active !== 'boolean') throw new UserError('active must be true or false');
+  const [r] = await db.query(`INSERT INTO hotel_alert_subscriptions (user_id, city, min_saving_pct, max_per_night, min_stars, active) VALUES ($1,$2,$3,$4,$5,$6)
+    ON CONFLICT (user_id, city) DO UPDATE SET min_saving_pct = EXCLUDED.min_saving_pct, max_per_night = EXCLUDED.max_per_night,
+      min_stars = EXCLUDED.min_stars, active = EXCLUDED.active RETURNING id`, [userId, city, pct, maxPerNight, stars, active]);
+  return plain<HotelAlert>((await db.query(`${HOTEL_ALERT_SQL} AND s.id = $2`, [userId, r.id]))[0]);
+}
+export async function deleteHotelAlert(db: Db, userId: number, city: string): Promise<void> {
+  await db.query(`DELETE FROM hotel_alert_subscriptions WHERE user_id = $1 AND city = $2`, [userId, cityCode(city)]);
+}
+
+// --- Saved hotel deals ---
+export async function listSavedHotels(db: Db, userId: number): Promise<SavedHotelDeal[]> {
+  return plainAll<SavedHotelDeal>(await db.query(`SELECT d.id AS hotel_deal_id, h.name AS hotel_name, h.city, c.name AS city_name, h.stars,
+      d.per_night, d.normal_per_night, d.saving_pct, d.currency, d.status, s.created_at AS saved_at
+    FROM saved_hotel_deals s JOIN hotel_deals d ON d.id = s.hotel_deal_id JOIN hotels h ON h.id = d.hotel_id
+    JOIN hotel_cities c ON c.code = h.city
+    WHERE s.user_id = $1 ORDER BY s.created_at DESC, d.id DESC`, [userId]));
+}
+export async function saveHotelDeal(db: Db, userId: number, hotelDealId: number): Promise<void> {
+  if (!Number.isInteger(hotelDealId) || !(await db.query(`SELECT 1 FROM hotel_deals WHERE id = $1 AND status IN ('live','expired')`, [hotelDealId])).length)
+    throw new UserError('Hotel deal not found', 404);
+  await db.query(`INSERT INTO saved_hotel_deals (user_id, hotel_deal_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [userId, hotelDealId]);
+}
+export async function unsaveHotelDeal(db: Db, userId: number, hotelDealId: number): Promise<void> {
+  if (!Number.isInteger(hotelDealId)) return;
+  await db.query(`DELETE FROM saved_hotel_deals WHERE user_id = $1 AND hotel_deal_id = $2`, [userId, hotelDealId]);
+}
+
 // --- Privacy (India DPDP Act 2023): export and erase ---
 /** Everything stored about the user, as one JSON object. Logs a user_events 'export' row. */
 export async function exportUserData(db: Db, userId: number): Promise<Record<string, unknown>> {
@@ -357,13 +414,16 @@ export async function exportUserData(db: Db, userId: number): Promise<Record<str
     channels: await q(`SELECT ${CHANNEL_COLS}, meta FROM notification_channels WHERE user_id = $1 ORDER BY id`),
     watches: await listWatches(db, userId),
     saved: await listSaved(db, userId),
-    notifications: await q(`SELECT id, deal_id, channel_id, kind, status, created_at, sent_at FROM notifications WHERE user_id = $1 ORDER BY id`),
+    hotel_alerts: await listHotelAlerts(db, userId),
+    saved_hotels: await listSavedHotels(db, userId),
+    notifications: await q(`SELECT id, deal_id, hotel_deal_id, channel_id, kind, status, created_at, sent_at FROM notifications WHERE user_id = $1 ORDER BY id`),
     clicks: await q(`SELECT deal_id, deal_date_id, channel, partner, clicked_at FROM clicks WHERE user_id = $1 ORDER BY id`),
+    hotel_clicks: await q(`SELECT hotel_deal_id, hotel_deal_date_id, channel, partner, clicked_at FROM hotel_clicks WHERE user_id = $1 ORDER BY id`),
     sessions: await q(`SELECT kind, user_agent, ip, created_at, last_seen_at, expires_at FROM sessions WHERE user_id = $1 ORDER BY created_at`),
     user_events: await q(`SELECT kind, data, created_at FROM user_events WHERE user_id = $1 ORDER BY id`),
   };
 }
-/** Erases personal data: deletes sessions/alerts/channels/watches/saved, anonymises the users row (status 'deleted'). */
+/** Erases personal data: deletes sessions/alerts/channels/watches/saved (flights and hotels), anonymises the users row (status 'deleted'). */
 export async function deleteAccount(db: Db, userId: number): Promise<void> {
   const [u] = await db.query(`SELECT email, status FROM users WHERE id = $1`, [userId]);
   if (!u || u.status === 'deleted') return;
@@ -371,7 +431,7 @@ export async function deleteAccount(db: Db, userId: number): Promise<void> {
   const addrs = (await db.query(`SELECT address FROM notification_channels WHERE user_id = $1`, [userId])).map(r => String(r.address));
   const [p] = await db.query(`SELECT phone FROM users WHERE id = $1`, [userId]);
   await forgetAddress(db, [u.email, ...addrs, ...(p?.phone ? [p.phone, String(p.phone).replace(/\D/g, '')] : [])]);
-  for (const t of ['sessions', 'alert_subscriptions', 'notification_channels', 'route_watches', 'saved_deals'])
+  for (const t of ['sessions', 'alert_subscriptions', 'notification_channels', 'route_watches', 'saved_deals', 'hotel_alert_subscriptions', 'saved_hotel_deals'])
     await db.query(`DELETE FROM ${t} WHERE user_id = $1`, [userId]);
   await db.query(`DELETE FROM login_codes WHERE lower(email) = lower($1)`, [u.email]);
   await db.query(`UPDATE users SET email = $2, name = NULL, phone = NULL, password_hash = NULL, home_airport = NULL,

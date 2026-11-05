@@ -1,15 +1,16 @@
 // "Never miss a real deal": choose airports, channels and a threshold. Works signed out: the choices are kept in a
 // signed cookie while the visitor confirms their email with a code, then saved.
 import { config } from '../../config.ts';
-import { addChannel, listAlerts, listChannels, requestLoginCode, updateChannel, upsertAlert, UserError } from '../../users/service.ts';
+import { addChannel, listAlerts, listChannels, listHotelAlerts, requestLoginCode, updateChannel, upsertAlert, upsertHotelAlert, UserError } from '../../users/service.ts';
 import { telegramConnectLink } from '../../notify/telegram.ts';
 import { esc } from '../html.ts';
 import { setCookie } from '../http.ts';
 import { attempt, csrfField, csrfToken, flash, page, postForm, secure, signValue, unsignValue, type P } from './common.ts';
-import { origins } from './data.ts';
+import { groupByRegion, hotelCities, origins } from './data.ts';
 
 const PENDING_COOKIE = 'fs_pending';
-export interface Choices { origins: string[]; pct: number; whatsapp: string | null; telegram: boolean; push: boolean; email: 'instant' | 'daily' | null }
+export interface HotelChoices { cities: string[]; pct: number; stars: number | null }
+export interface Choices { origins: string[]; pct: number; whatsapp: string | null; telegram: boolean; push: boolean; email: 'instant' | 'daily' | null; hotels?: HotelChoices }
 
 /** Indian mobile numbers may be typed without +91. */
 export function normalisePhone(raw: string) {
@@ -20,19 +21,25 @@ export function normalisePhone(raw: string) {
   throw new UserError('Enter your WhatsApp number with country code, e.g. +91 98123 45678.');
 }
 
-function readChoices(f: URLSearchParams, valid: Set<string>): Choices {
+function readChoices(f: URLSearchParams, valid: Set<string>, validHotel: Set<string> = new Set()): Choices {
   const os = [...new Set(f.getAll('origin'))].filter(o => valid.has(o));
-  if (!os.length) throw new UserError('Pick at least one airport.');
+  const hc = [...new Set(f.getAll('hotel_city'))].filter(c => validHotel.has(c));
+  if (!os.length && !hc.length) throw new UserError('Pick at least one airport (or a city for hotel deals).');
   const pct = [25, 35, 50].includes(Number(f.get('pct'))) ? Number(f.get('pct')) : 25;
   const whatsapp = f.get('ch_whatsapp') ? normalisePhone(f.get('phone') ?? '') : null;
   const email = f.get('ch_email') ? (f.get('email_freq') === 'instant' ? 'instant' : 'daily') : null;
+  const hotelPct = [25, 35, 50].includes(Number(f.get('hotel_pct'))) ? Number(f.get('hotel_pct')) : 25;
+  const stars = [3, 4, 5].includes(Number(f.get('hotel_stars'))) ? Number(f.get('hotel_stars')) : null;
   const c: Choices = { origins: os, pct, whatsapp, telegram: !!f.get('ch_telegram'), push: !!f.get('ch_push'), email };
+  if (hc.length) c.hotels = { cities: hc, pct: hotelPct, stars };
   if (!c.whatsapp && !c.telegram && !c.push && !c.email) throw new UserError('Pick at least one way to get your alerts.');
   return c;
 }
 
 export async function applyChoices(p: P, userId: number, c: Choices) {
   for (const o of c.origins) await upsertAlert(p.db, userId, { origin: o, min_saving_pct: c.pct, active: true });
+  for (const city of c.hotels?.cities ?? [])
+    await upsertHotelAlert(p.db, userId, { city, min_saving_pct: c.hotels!.pct, min_stars: c.hotels!.stars, active: true });
   if (c.whatsapp) await addChannel(p.db, userId, { kind: 'whatsapp', address: c.whatsapp, frequency: 'instant' });
   const emails = (await listChannels(p.db, userId)).filter(ch => ch.kind === 'email');
   for (const ch of emails) {
@@ -59,6 +66,10 @@ export async function handleAlerts(p: P): Promise<boolean> {
     const mine = p.user ? await listAlerts(p.db, p.user.id) : [];
     const chosen = new Set(mine.length ? mine.map(a => a.origin) : p.user?.home_airport ? [p.user.home_airport] : []);
     const pct = mine[0]?.min_saving_pct ?? 25;
+    const hcs = await hotelCities(p.db);
+    const myHotels = p.user ? await listHotelAlerts(p.db, p.user.id) : [];
+    const hotelChosen = new Set(myHotels.map(h => h.city));
+    const hotelPct = myHotels[0]?.min_saving_pct ?? 25, hotelStars = myHotels[0]?.min_stars ?? null;
     const chip = (name: string, value: string, label: string, on: boolean, extra = '') =>
       `<label class="chip"><input type="checkbox" name="${name}" value="${esc(value)}"${on ? ' checked' : ''}> ${label}${extra}</label>`;
     const body = `<h1>Never miss a real deal</h1>
@@ -77,6 +88,12 @@ export async function handleAlerts(p: P): Promise<boolean> {
         <h2 style="margin-top:20px">3. Only tell me about deals at least…</h2>
         <div class="chips">${[25, 35, 50].map(n => `<label class="chip"><input type="radio" name="pct" value="${n}"${n === pct ? ' checked' : ''}> ${n}% below normal</label>`).join('')}</div>
         <p class="meta">About 3–5 messages a week per airport at 25%; fewer at 35% and 50%.</p>
+        ${hcs.length ? `<details id="hotels"${myHotels.length ? ' open' : ''} style="margin-top:20px"><summary><h2 style="display:inline">4. Hotels too <span class="meta" style="margin:0">(optional)</span></h2></summary>
+          <p class="meta">Pick cities and we'll also tell you when a hotel there is far below its usual nightly rate.</p>
+          ${groupByRegion(hcs).map(([region, cs]) => `<h3>${esc(region)}</h3><div class="chips">${cs.map(c => chip('hotel_city', c.code, esc(c.name), hotelChosen.has(c.code))).join('')}</div>`).join('')}
+          <div class="chips" style="margin-top:12px">${[25, 35, 50].map(n => `<label class="chip"><input type="radio" name="hotel_pct" value="${n}"${n === hotelPct ? ' checked' : ''}> ${n}% below normal</label>`).join('')}</div>
+          <label for="hotel_stars">Hotel class</label><select id="hotel_stars" name="hotel_stars" class="wide"><option value="">Any</option>${[3, 4, 5].map(n => `<option value="${n}"${n === hotelStars ? ' selected' : ''}>${n}★ and up</option>`).join('')}</select>
+        </details>` : ''}
         ${p.user ? `<p class="meta">Signed in as ${esc(p.user.email)}.</p>`
           : `<label for="email">Your email</label><input id="email" type="email" name="email" required autocomplete="email"><p class="meta">We'll send a code to confirm it's you.</p>`}
         <p><button class="btn">Start my free alerts</button></p>
@@ -91,8 +108,9 @@ export async function handleAlerts(p: P): Promise<boolean> {
   if (path === '/alerts' && post) {
     const f = await postForm(p);
     const valid = new Set((await origins(p.db)).map(o => o.origin));
+    const validHotel = new Set((await hotelCities(p.db)).map(c => c.code));
     await attempt(p, '/alerts', async () => {
-      const c = readChoices(f, valid);
+      const c = readChoices(f, valid, validHotel);
       if (p.user) {
         await applyChoices(p, p.user.id, c);
         p.out.push(setCookie('fs_done', JSON.stringify({ telegram: c.telegram, push: c.push }), { maxAgeSec: 600, secure }));
@@ -112,12 +130,14 @@ export async function handleAlerts(p: P): Promise<boolean> {
     let done: { telegram?: boolean; push?: boolean } = {};
     try { done = JSON.parse(p.ck.fs_done ?? '{}'); } catch {}
     const alerts = await listAlerts(p.db, p.user.id);
+    const hotelAlerts = await listHotelAlerts(p.db, p.user.id);
     const steps: string[] = [];
     if (done.telegram) steps.push(`<p><a class="btn" href="${esc(telegramConnectLink(p.user.id))}" rel="noopener">Connect Telegram</a> <span class="meta">Opens Telegram; tap Start.</span></p>`);
     if (done.push) steps.push(`<p><button class="btn" type="button" data-push data-csrf="${esc(csrfToken(p))}">Turn on app notifications</button> <span class="meta" data-push-status></span></p>
       <script src="/static/push.js" defer></script>`);
     page(p, 'Your alerts are on', `<h1>Your alerts are on</h1>
-      <p class="lead">We'll tell you about deals at least ${alerts[0]?.min_saving_pct ?? 25}% below normal from ${esc(alerts.map(a => a.city).join(', ') || 'your airports')}.</p>
+      ${alerts.length || !hotelAlerts.length ? `<p class="lead">We'll tell you about deals at least ${alerts[0]?.min_saving_pct ?? 25}% below normal from ${esc(alerts.map(a => a.city).join(', ') || 'your airports')}.</p>` : ''}
+      ${hotelAlerts.length ? `<p class="lead">Hotel deals: at least ${hotelAlerts[0].min_saving_pct}% below normal in ${esc(hotelAlerts.map(h => h.city_name).join(', '))}.</p>` : ''}
       ${steps.length ? `<div class="panel"><h2>One more step</h2>${steps.join('')}</div>` : ''}
       <p><a href="/account#alerts">Change your alerts</a> · <a href="/">See live deals</a></p>`);
     return true;

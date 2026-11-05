@@ -14,6 +14,7 @@ import { handleAccountPages } from './account.ts';
 import { handleAdminUsers } from './admin-users.ts';
 import { handleHotelPages } from './hotels.ts';
 import { handleAdminHotels } from './admin-hotels.ts';
+import { hotelStrip } from './hotels/data.ts';
 
 const DEAL_LIST_SQL = `
   SELECT d.*, r.origin, r.destination, r.max_stops, ao.city AS from_city, ad.city AS to_city,
@@ -38,6 +39,14 @@ function isAdmin(req: IncomingMessage) {
 async function readForm(req: IncomingMessage) {
   let body = ''; for await (const c of req) { body += c; if (body.length > 1e5) break; }
   return new URLSearchParams(body);
+}
+
+/** Small "Hotel deals" section for the home page. */
+async function hotelTeaser(db: Db) {
+  const [h] = await db.query(`SELECT count(*)::int AS n, max(saving_pct) AS best FROM hotel_deals WHERE status = 'live'`);
+  return `<div class="panel" style="margin-top:24px"><h2>Hotel deals</h2><p class="meta" style="margin:0 0 8px">${h.n
+    ? `${h.n} rated hotel${h.n === 1 ? '' : 's'} below their normal price a night right now, up to ${Math.round(h.best)}% off.`
+    : 'Rated hotels well below their normal price a night, checked like our flight deals.'}</p><a class="btn secondary" href="/hotels">See hotel deals</a></div>`;
 }
 
 export function startServer(db: Db, notify: Notify, port = config.port) {
@@ -65,7 +74,8 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
           ${origins.map(o => `<option value="${esc(o.origin)}"${o.origin === from ? ' selected' : ''}>From ${esc(o.city)}</option>`).join('')}</select><noscript><button class="btn">Filter</button></noscript></form>`;
         const body = `<h1>${expired ? 'Expired deals' : 'Flight deals from India'}</h1>
           <p class="lead">${expired ? 'Deals that have ended, with the reason. We keep them so you can see how fares move.' : 'Only fares at least 25% below the route\'s normal price and bookable on 3 or more date pairs. Every deal is re-checked every 6 hours.'}</p>
-          ${filter}${deals.length ? `<div class="grid">${deals.map(dealCard).join('')}</div>` : '<p>No deals right now. New ones appear as soon as the scanner finds them.</p>'}`;
+          ${filter}${deals.length ? `<div class="grid">${deals.map(dealCard).join('')}</div>` : '<p>No deals right now. New ones appear as soon as the scanner finds them.</p>'}
+          ${expired ? '' : await hotelTeaser(db)}`;
         return send(res, 200, layout(expired ? 'Expired deals' : 'Flight deals from India', body));
       }
 
@@ -86,7 +96,8 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
           ${dates.map(x => `<tr><td>${fmtDate(x.depart)}</td><td>${fmtDate(x.return_date)}</td><td>${money(x.price, d.currency)}<div class="meta">${esc(x.airlines ?? '')}</div></td>
             <td>${d.status === 'live' ? `<a class="btn" rel="nofollow" href="/go/${x.id}">Book</a>` : ''}</td></tr>`).join('')}
           </tbody></table>
-          <p class="meta">Prices were found on Google Flights for 1 adult in economy and checked ${ago(d.last_verified)}. The booking site shows the final price.</p>`;
+          <p class="meta">Prices were found on Google Flights for 1 adult in economy and checked ${ago(d.last_verified)}. The booking site shows the final price.</p>
+          ${await hotelStrip(db, d.destination, d.to_city)}`;
         return send(res, 200, layout(`${d.from_city} to ${d.to_city} from ${money(d.price, d.currency)}`, body));
       }
 
@@ -134,9 +145,10 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         const queue = await queueStats(db);
         const review = await db.query(`${DEAL_LIST_SQL} WHERE d.status = 'review' ORDER BY d.saving_pct DESC`);
         const recent = await db.query(`${DEAL_LIST_SQL} WHERE d.status IN ('live','expired','rejected') ORDER BY coalesce(d.expired_at, d.published_at, d.first_seen) DESC LIMIT 15`);
+        const [hrev] = await db.query(`SELECT count(*)::int AS n FROM hotel_deals WHERE status = 'review'`);
         const stat = (label: string, v: unknown) => `<span class="stat"><b>${esc(v)}</b>${esc(label)}</span>`;
         const body = `<h1>Admin</h1>
-          <p><a href="/admin/users">Users</a> · <a href="/admin/users/outbox">Outbox</a></p>
+          <p><a href="/admin/users">Users</a> · <a href="/admin/users/outbox">Outbox</a> · <a href="/admin/hotels">Hotel deals</a>${hrev.n ? ` (<b>${hrev.n}</b> waiting for review)` : ''}</p>
           <div>${stat('live deals', counts.live)}${stat('waiting for review', counts.review)}${stat('in deep check', counts.candidate)}${stat('expired', counts.expired)}${stat('rejected', counts.rejected)}</div>
           <div>${stat('prices stored', obs.n.toLocaleString('en-IN'))}${stat('prices last 24 h', obs.day.toLocaleString('en-IN'))}${stat(`credits this month of ${Number(s.raw.monthly_credit_budget).toLocaleString('en-IN')}`, credits.toLocaleString('en-IN'))}${stat('booking clicks, 24 h', clk.day)}</div>
           <p class="meta">Fare source: <b>${esc(config.source)}</b>${config.source === 'mock' ? ' (simulated fares; add SCRAPEDO_TOKEN to .env for real ones)' : ''} · auto-approve: <b>${esc(s.raw.auto_approve)}</b></p>

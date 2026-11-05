@@ -1,10 +1,11 @@
 // Decides what to search next: the weekly sweep calendar per route, within the credit budget.
 import type { Db, Settings } from './db.ts';
 
-/** Credits spent this calendar month (from finished jobs). */
+/** Credits spent this calendar month (from finished flight and hotel jobs; both share the budget). */
 export async function creditsThisMonth(db: Db): Promise<number> {
-  const [r] = await db.query(`SELECT coalesce(sum(credits), 0)::int AS c FROM search_jobs
-                              WHERE finished_at >= date_trunc('month', now())`);
+  const [r] = await db.query(`SELECT (
+      (SELECT coalesce(sum(credits), 0) FROM search_jobs WHERE finished_at >= date_trunc('month', now())) +
+      (SELECT coalesce(sum(credits), 0) FROM hotel_search_jobs WHERE finished_at >= date_trunc('month', now())))::int AS c`);
   return r.c;
 }
 

@@ -2,14 +2,15 @@
 import { config } from '../../config.ts';
 import { money } from '../../engine/notify.ts';
 import {
-  addChannel, deleteAccount, deleteAlert, exportUserData, listAlerts, listChannels, listSaved, listWatches, logoutEverywhere,
-  removeChannel, removeWatch, setPassword, updateChannel, updateProfile, upsertAlert, UserError, type Channel,
+  addChannel, deleteAccount, deleteAlert, deleteHotelAlert, exportUserData, listAlerts, listChannels, listHotelAlerts, listSaved,
+  listSavedHotels, listWatches, logoutEverywhere, removeChannel, removeWatch, setPassword, updateChannel, updateProfile, upsertAlert,
+  upsertHotelAlert, UserError, type Channel,
 } from '../../users/service.ts';
 import { telegramConnectLink } from '../../notify/telegram.ts';
 import { esc, fmtDate } from '../html.ts';
 import { HttpError, readJson, send, json } from '../http.ts';
 import { attempt, checkCsrf, clearSession, csrfField, csrfToken, flash, go, opt, page, postForm, requireUser, type P } from './common.ts';
-import { origins } from './data.ts';
+import { hotelCities, origins } from './data.ts';
 import { normalisePhone } from './alerts.ts';
 
 const KIND_NAMES: Record<Channel['kind'], string> = { email: 'Email', telegram: 'Telegram', whatsapp: 'WhatsApp', push: 'App notifications' };
@@ -22,12 +23,14 @@ export async function handleAccount(p: P): Promise<boolean> {
   if (!user) return true;
 
   if (path === '/account' && !post) {
-    const [alerts, channels, watches, saved, os] = await Promise.all([
-      listAlerts(p.db, user.id), listChannels(p.db, user.id), listWatches(p.db, user.id), listSaved(p.db, user.id), origins(p.db)]);
+    const [alerts, channels, watches, saved, os, hotelAlerts, savedHotels, hcs] = await Promise.all([
+      listAlerts(p.db, user.id), listChannels(p.db, user.id), listWatches(p.db, user.id), listSaved(p.db, user.id), origins(p.db),
+      listHotelAlerts(p.db, user.id), listSavedHotels(p.db, user.id), hotelCities(p.db)]);
+    const starsSel = (v: number | null) => `<select name="min_stars" aria-label="Hotel class"><option value="">Any class</option>${[3, 4, 5].map(n => opt(String(n), `${n}★ and up`, v)).join('')}</select>`;
     const f = csrfField(p);
     const pctSel = (v: number) => `<select name="pct">${[25, 35, 50].map(n => opt(String(n), `${n}% below`, v)).join('')}</select>`;
     const body = `<h1>Your account</h1><p class="lead">${esc(user.email)}${user.email_verified_at ? '' : ' (not verified yet)'}</p>
-    <nav class="row" style="margin-bottom:16px"><a href="#alerts">Alerts</a><a href="#channels">Channels</a><a href="#watches">Watches</a><a href="/saved">Saved deals</a><a href="#privacy">Your data</a></nav>
+    <nav class="row" style="margin-bottom:16px"><a href="#alerts">Alerts</a><a href="#hotel-alerts">Hotel alerts</a><a href="#channels">Channels</a><a href="#watches">Watches</a><a href="/saved">Saved deals</a><a href="#privacy">Your data</a></nav>
 
     <section class="panel" id="profile"><h2>Profile</h2><form method="post" action="/account/profile">${f}
       <label for="name">Name</label><input id="name" type="text" name="name" maxlength="100" value="${esc(user.name ?? '')}" autocomplete="name">
@@ -55,6 +58,17 @@ export async function handleAccount(p: P): Promise<boolean> {
         <select name="origin" aria-label="Airport">${os.filter(o => !alerts.some(a => a.origin === o.origin)).map(o => opt(o.origin, `From ${o.city}`, user.home_airport)).join('')}</select>
         ${pctSel(25)}<input type="hidden" name="active" value="1"><button class="btn">Add alert</button></form></section>
 
+    <section class="panel" id="hotel-alerts"><h2>Hotel alerts</h2>
+      ${hotelAlerts.length ? `<ul class="list">${hotelAlerts.map(a => `<li><form method="post" action="/account/hotel-alert" class="row">${f}<input type="hidden" name="city" value="${esc(a.city)}">
+        <b style="min-width:140px">Hotels in ${esc(a.city_name)}</b> ${pctSel(a.min_saving_pct)} ${starsSel(a.min_stars)}
+        <input type="number" name="max_per_night" min="0" step="500" placeholder="Max ₹/night (any)" value="${a.max_per_night ?? ''}" style="width:150px" aria-label="Maximum price per night">
+        <label class="inline"><input type="checkbox" name="active" value="1"${a.active ? ' checked' : ''}> On</label>
+        <button class="btn secondary">Save</button><button class="btn secondary" name="delete" value="1">Delete</button></form></li>`).join('')}</ul>`
+        : '<p>No hotel alerts yet.</p>'}
+      ${hcs.some(c => !hotelAlerts.some(a => a.city === c.code)) ? `<form method="post" action="/account/hotel-alert" class="row" style="margin-top:12px">${f}
+        <select name="city" aria-label="City">${hcs.filter(c => !hotelAlerts.some(a => a.city === c.code)).map(c => opt(c.code, `Hotels in ${c.name}`, null)).join('')}</select>
+        ${pctSel(25)} ${starsSel(null)}<input type="hidden" name="active" value="1"><button class="btn">Add hotel alert</button></form>` : ''}</section>
+
     <section class="panel" id="channels"><h2>Where we send them</h2>
       ${channels.length ? `<ul class="list">${channels.map(c => `<li><form method="post" action="/account/channel/${c.id}" class="row">${f}
         <b style="min-width:150px">${KIND_NAMES[c.kind]}</b><span class="meta" style="margin:0;min-width:160px">${esc(c.kind === 'push' ? 'this browser or phone' : c.address)}${c.active ? '' : ' · paused'}</span>
@@ -80,13 +94,17 @@ export async function handleAccount(p: P): Promise<boolean> {
       ${saved.length ? `<ul class="list">${saved.slice(0, 5).map(s => `<li><a href="/deal/${s.deal_id}">${esc(s.from_city)} → ${esc(s.to_city)}</a> · ${money(s.price, s.currency)}${s.status === 'live' ? '' : ` <span class="tag">${esc(s.status)}</span>`}</li>`).join('')}</ul>` : '<p>No saved deals.</p>'}
       <p><a href="/saved">All saved deals</a></p></section>
 
+    <section class="panel" id="saved-hotels"><h2>Saved hotel deals</h2>
+      ${savedHotels.length ? `<ul class="list">${savedHotels.slice(0, 5).map(s => `<li><a href="/hotel-deal/${s.hotel_deal_id}">${esc(s.hotel_name)}, ${esc(s.city_name)}</a> · ${money(s.per_night, s.currency)}/night${s.status === 'live' ? '' : ` <span class="tag">${esc(s.status)}</span>`}</li>`).join('')}</ul>` : '<p>No saved hotel deals.</p>'}
+      <p><a href="/saved#hotels">All saved hotel deals</a></p></section>
+
     <section class="panel" id="sessions"><h2>Signed-in devices</h2><p class="meta">Lost a phone or used a shared computer? Sign out everywhere, including here.</p>
       <form method="post" action="/account/logout-all">${f}<button class="btn secondary">Sign out everywhere</button></form>
       <form method="post" action="/signout" style="margin-top:8px">${f}<button class="btn secondary">Sign out</button></form></section>
 
     <section class="panel" id="privacy"><h2>Your data</h2>
       <p><a class="btn secondary" href="/account/export">Download my data</a> <span class="meta">A JSON file with everything we store about you.</span></p>
-      <h3>Delete my account</h3><p class="meta">This removes your alerts, channels, watches, saved deals and personal details. It can't be undone.</p>
+      <h3>Delete my account</h3><p class="meta">This removes your alerts (flights and hotels), channels, watches, saved deals and personal details. It can't be undone.</p>
       <form method="post" action="/account/delete">${f}<label for="confirm">Type DELETE to confirm</label>
         <input id="confirm" type="text" name="confirm" autocomplete="off" required style="max-width:200px"> <button class="btn danger">Delete my account</button></form></section>
     <p class="meta">Member since ${day(user.created_at)}.</p>`;
@@ -144,6 +162,18 @@ export async function handleAccount(p: P): Promise<boolean> {
       const max = Number(f.get('max_price'));
       await upsertAlert(p.db, user.id, { origin, min_saving_pct: Number(f.get('pct')) || 25, max_price: max > 0 ? max : null, active: f.get('active') === '1' });
       flash(p, 'Alert saved.');
+    });
+    return true;
+  }
+  if (path === '/account/hotel-alert') {
+    await attempt(p, back('hotel-alerts'), async () => {
+      const city = f.get('city') ?? '';
+      if (f.get('delete')) { await deleteHotelAlert(p.db, user.id, city); flash(p, 'Hotel alert deleted.'); return; }
+      const max = Number(f.get('max_per_night'));
+      const stars = Number(f.get('min_stars'));
+      await upsertHotelAlert(p.db, user.id, { city, min_saving_pct: Number(f.get('pct')) || 25, max_per_night: max > 0 ? max : null,
+        min_stars: stars >= 1 && stars <= 5 ? stars : null, active: f.get('active') === '1' });
+      flash(p, 'Hotel alert saved.');
     });
     return true;
   }

@@ -50,6 +50,10 @@ async function route({ db, req, res, url }: Ctx, path: string, method: string): 
       WHERE r.active AND ($1::text IS NULL OR r.origin = $1) ORDER BY ao.city, ad.city`, [from]) });
   }
 
+  if (method === 'GET' && path === 'hotel-cities') {
+    return ok({ cities: await db.query(`SELECT code, name, country, region FROM hotel_cities WHERE active ORDER BY region NULLS LAST, priority DESC, name`) });
+  }
+
   // Sign-in
   if (path.startsWith('auth/') && method === 'POST') {
     const body = await readJson(req);
@@ -137,6 +141,19 @@ async function route({ db, req, res, url }: Ctx, path: string, method: string): 
   p = path.match(/^me\/saved\/(\d+)$/);
   if (p && method === 'PUT') { await U.saveDeal(db, uid, Number(p[1])); return ok(); }
   if (p && method === 'DELETE') { await U.unsaveDeal(db, uid, Number(p[1])); return ok(); }
+
+  // Hotel alerts and saved hotel deals
+  if (path === 'me/hotel-alerts') {
+    if (method === 'GET') return ok({ hotel_alerts: await U.listHotelAlerts(db, uid) });
+    if (method === 'POST') return ok({ hotel_alert: await U.upsertHotelAlert(db, uid, body as any) });
+  }
+  p = path.match(/^me\/hotel-alerts\/([A-Za-z0-9]{2,10})$/);
+  if (p && method === 'DELETE') { await U.deleteHotelAlert(db, uid, p[1]); return ok(); }
+
+  if (path === 'me/saved-hotels' && method === 'GET') return ok({ saved_hotels: await U.listSavedHotels(db, uid) });
+  p = path.match(/^me\/saved-hotels\/(\d+)$/);
+  if (p && method === 'PUT') { await U.saveHotelDeal(db, uid, Number(p[1])); return ok(); }
+  if (p && method === 'DELETE') { await U.unsaveHotelDeal(db, uid, Number(p[1])); return ok(); }
 
   return ok({ error: 'Not found' }, 404);
 }

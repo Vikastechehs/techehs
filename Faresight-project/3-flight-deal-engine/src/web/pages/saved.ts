@@ -1,6 +1,6 @@
 // Saved deals, route watches, "save this deal", and one-tap unsubscribe.
 import { money } from '../../engine/notify.ts';
-import { addWatch, listSaved, listWatches, saveDeal, unsaveDeal } from '../../users/service.ts';
+import { addWatch, listSaved, listSavedHotels, listWatches, saveDeal, unsaveDeal, unsaveHotelDeal } from '../../users/service.ts';
 import { verifyUnsubscribeToken } from '../../notify/unsubscribe.ts';
 import { esc } from '../html.ts';
 import { readForm } from '../http.ts';
@@ -13,14 +13,30 @@ export async function handleSaved(p: P): Promise<boolean> {
   if (path === '/saved' && !post) {
     const user = requireUser(p); if (!user) return true;
     const saved = await listSaved(p.db, user.id);
+    const hotels = await listSavedHotels(p.db, user.id);
     const f = csrfField(p);
+    const stars = (n: number | null) => n ? ` <span class="meta" style="margin:0">${'★'.repeat(Math.min(5, n))}</span>` : '';
     page(p, 'Saved deals', `<h1>Saved deals</h1><p class="lead">Deals you saved. Ended deals stay here so you can see what you missed.</p>
       ${saved.length ? `<div class="grid">${saved.map(s => `<div class="card"><h2><a href="/deal/${s.deal_id}">${esc(s.from_city)} → ${esc(s.to_city)}</a></h2>
         <div class="price">${money(s.price, s.currency)}</div><div><span class="norm">normally ${money(s.normal_price, s.currency)}</span> · <span class="save">${Math.round(s.saving_pct)}% below</span></div>
         <div class="meta">${s.status === 'live' ? 'Live now' : `Ended`}</div>
         <form method="post" action="/deal/${s.deal_id}/unsave" style="margin-top:8px">${f}<button class="btn secondary">Remove</button></form></div>`).join('')}</div>`
-        : '<p>Nothing saved yet. Open any deal and tap "Save deal".</p>'}
+        : hotels.length ? '<p>No saved flight deals.</p>' : '<p>Nothing saved yet. Open any deal and tap "Save deal".</p>'}
+      ${hotels.length ? `<h2 id="hotels" style="margin-top:24px">Saved hotel deals</h2>
+      <div class="grid">${hotels.map(s => `<div class="card"><h2><a href="/hotel-deal/${s.hotel_deal_id}">${esc(s.hotel_name)}</a>${stars(s.stars)}</h2>
+        <div class="meta" style="margin:0">${esc(s.city_name)}</div>
+        <div class="price">${money(s.per_night, s.currency)}<span class="meta" style="margin:0"> /night</span></div><div><span class="norm">normally ${money(s.normal_per_night, s.currency)}</span> · <span class="save">${Math.round(s.saving_pct)}% below</span></div>
+        <div class="meta">${s.status === 'live' ? 'Live now' : 'Ended'}</div>
+        <form method="post" action="/saved/hotel/${s.hotel_deal_id}/remove" style="margin-top:8px">${f}<button class="btn secondary">Remove</button></form></div>`).join('')}</div>` : ''}
       <p><a href="/">See live deals</a></p>`);
+    return true;
+  }
+
+  const hm = path.match(/^\/saved\/hotel\/(\d{1,9})\/remove$/);
+  if (hm && post) {
+    const user = requireUser(p); if (!user) return true;
+    await postForm(p);
+    await attempt(p, '/saved#hotels', async () => { await unsaveHotelDeal(p.db, user.id, Number(hm[1])); flash(p, 'Removed.'); return '/saved'; });
     return true;
   }
 

@@ -11,3 +11,7 @@ export interface HotelSource { name: string; search(q: HotelQuery): Promise<Hote
 
 /** Called when a hotel deal goes live / ends. Set by main.ts. */
 export type HotelNotify = (hotelDealId: number) => Promise<void>;
+
+// Implementations (re-exported so other modules can import everything hotel-related from here)
+export { reviewHotelDeal, hotelPasses, setHotelDealEndedHook } from './deals.ts';
+export { hotelBookingUrl, hotelPartnerName } from './links.ts';

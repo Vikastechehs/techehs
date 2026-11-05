@@ -3,7 +3,8 @@
 import type { Db } from '../db.ts';
 import { dealSummary } from '../engine/notify.ts';
 import { enqueue, type OutChannel } from './outbox.ts';
-import { renderDigest, type NoticeKind } from './render.ts';
+import { hotelDealSummary } from './hotels.ts';
+import { renderDigest, type DigestKind } from './render.ts';
 
 const TZ = 'Asia/Kolkata';
 export const localDate = (now: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
@@ -23,27 +24,36 @@ export async function sendDailyDigests(db: Db, opts: DigestOptions = {}): Promis
 
   // Queued notifications on daily channels that no outbox message carries yet
   const pending = await db.query(`
-    SELECT n.id, n.kind, n.deal_id, c.id AS channel_id, c.user_id, c.kind AS channel_kind, c.address
+    SELECT n.id, n.kind, n.deal_id, n.hotel_deal_id, c.id AS channel_id, c.user_id, c.kind AS channel_kind, c.address
     FROM notifications n
     JOIN notification_channels c ON c.id = n.channel_id
     JOIN users u ON u.id = n.user_id
-    WHERE n.status = 'queued' AND n.kind IN ('deal_live','route_watch','deal_ended') AND n.deal_id IS NOT NULL
+    WHERE n.status = 'queued' AND (
+        (n.kind IN ('deal_live','route_watch','deal_ended') AND n.deal_id IS NOT NULL)
+        OR (n.kind IN ('hotel_live','hotel_ended') AND n.hotel_deal_id IS NOT NULL))
       AND c.active AND c.frequency = 'daily' AND u.status = 'active'
       AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.meta -> 'notification_ids' @> to_jsonb(n.id))
     ORDER BY c.id, n.id`);
   const byChannel = new Map<number, typeof pending>();
   for (const p of pending) byChannel.set(p.channel_id, [...(byChannel.get(p.channel_id) ?? []), p]);
 
-  const deals = new Map<number, any>();
+  const deals = new Map<number, any>(), hotelDeals = new Map<number, any>();
   let queued = 0;
   for (const [channelId, rows] of byChannel) {
-    const items: { kind: NoticeKind; d: any }[] = [];
+    const items: { kind: DigestKind; d: any }[] = [];
     const ids: number[] = []; const stale: number[] = [];
     for (const r of rows) {
-      if (!deals.has(r.deal_id)) deals.set(r.deal_id, await dealSummary(db, r.deal_id));
-      const d = deals.get(r.deal_id);
+      let d: any;
+      if (r.deal_id != null) {
+        if (!deals.has(r.deal_id)) deals.set(r.deal_id, await dealSummary(db, r.deal_id));
+        d = deals.get(r.deal_id);
+      } else {
+        if (!hotelDeals.has(r.hotel_deal_id)) hotelDeals.set(r.hotel_deal_id, await hotelDealSummary(db, r.hotel_deal_id));
+        d = hotelDeals.get(r.hotel_deal_id);
+      }
       // A deal that ended before the digest isn't worth announcing
-      if (!d || (r.kind !== 'deal_ended' && d.status !== 'live')) { stale.push(Number(r.id)); continue; }
+      const ended = r.kind === 'deal_ended' || r.kind === 'hotel_ended';
+      if (!d || (!ended && d.status !== 'live')) { stale.push(Number(r.id)); continue; }
       items.push({ kind: r.kind, d }); ids.push(Number(r.id));
     }
     if (stale.length) await db.query(`UPDATE notifications SET status = 'skipped', error = 'deal ended before the digest' WHERE id = ANY($1::bigint[])`, [stale]);
