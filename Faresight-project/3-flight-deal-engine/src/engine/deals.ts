@@ -4,6 +4,14 @@ import type { Job, Observation } from '../worker.ts';
 import { normalPrice } from './norms.ts';
 
 export type Notify = (dealId: number) => Promise<void>;
+
+// Called after a live deal expires (e.g. to tell users who were alerted). Set once at startup; errors are logged, not thrown.
+let dealEndedHook: Notify | null = null;
+export function setDealEndedHook(fn: Notify | null) { dealEndedHook = fn; }
+async function dealEnded(dealId: number) {
+  if (!dealEndedHook) return;
+  try { await dealEndedHook(dealId); } catch (e) { console.error(`deal ended hook (deal ${dealId}): ${(e as Error).message}`); }
+}
 const addDays = (d: string, n: number) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
 
 /** Does a price pass the deal test against its normal price? */
@@ -177,8 +185,9 @@ export async function maybeFinishVerify(db: Db, s: Settings, dealId: number) {
     const saving = Math.round((1 - price / deal.normal_price) * 1000) / 10;
     await db.query(`UPDATE deals SET price = $2, saving_pct = $3, last_verified = now() WHERE id = $1`, [dealId, price, saving]);
   } else {
-    await db.query(`UPDATE deals SET status = 'expired', expired_at = now(), reason = $2 WHERE id = $1`,
+    const ended = await db.query(`UPDATE deals SET status = 'expired', expired_at = now(), reason = $2 WHERE id = $1 AND status = 'live' RETURNING id`,
       [dealId, best == null ? 'no flights found at re-check' : `price rose to ${best} (shown ${deal.price})`]);
+    if (ended.length) await dealEnded(dealId);
   }
 }
 
@@ -188,6 +197,7 @@ export async function expirePastDeals(db: Db) {
     UPDATE deals d SET status = 'expired', expired_at = now(), reason = 'all dates passed'
     WHERE status IN ('live','review') AND NOT EXISTS (SELECT 1 FROM deal_dates dd WHERE dd.deal_id = d.id AND dd.depart >= current_date + 1)
     RETURNING id`);
+  for (const r of rows) await dealEnded(r.id);
   return rows.length;
 }
 

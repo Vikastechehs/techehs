@@ -1,0 +1,37 @@
+# Local or single-server deployment: PostgreSQL 16 plus the app.
+#   cp .env.example .env    (fill in ADMIN_PASSWORD, APP_SECRET, SCRAPEDO_TOKEN, PUBLIC_URL, ...)
+#   docker compose up -d --build
+# DATABASE_URL below points the app at the postgres service and overrides any value in .env.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flightdeals
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flightdeals}
+      POSTGRES_DB: flightdeals
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flightdeals -d flightdeals"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://flightdeals:${POSTGRES_PASSWORD:-flightdeals}@db:5432/flightdeals
+      PORT: "3000"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

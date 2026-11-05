@@ -68,6 +68,9 @@ test('engine finds sale fares, confirms them with a deep check, and expires them
   const db = await freshDb();
   await db.query(`UPDATE settings SET value = 'true' WHERE key = 'auto_approve'`);
   await db.query(`UPDATE settings SET value = '100000' WHERE key = 'daily_search_cap'`);
+  // Simulated fares cost no credits. Without this the monthly credit budget, spread over the days left in the
+  // month, caps the sweep (about 3,100 searches early in a month), so the outcome would depend on today's date.
+  await db.query(`UPDATE settings SET value = '0' WHERE key = 'credits_per_search'`);
   const getS = () => getSettings(db); const s = await getS();
   const published: number[] = [];
   const after = makeAfterSearch(db, getS, async id => { published.push(id); });
@@ -101,6 +104,9 @@ test('website: deal list, deal page, booking redirect with click logging, admin 
   const db = await freshDb();
   await db.query(`UPDATE settings SET value = 'true' WHERE key = 'auto_approve'`);
   await db.query(`UPDATE settings SET value = '100000' WHERE key = 'daily_search_cap'`);
+  // Simulated fares cost no credits. Without this the monthly credit budget, spread over the days left in the
+  // month, caps the sweep (about 3,100 searches early in a month), so the outcome would depend on today's date.
+  await db.query(`UPDATE settings SET value = '0' WHERE key = 'credits_per_search'`);
   const getS = () => getSettings(db); const s = await getS();
   await scheduleSweeps(db, s);
   await runWorkers(db, mockSource(), s, makeAfterSearch(db, getS, async () => {}), { concurrency: 50, drain: true });
