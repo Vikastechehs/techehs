@@ -13,6 +13,7 @@ import { handleUserApi } from '../users/api.ts';
 import { handleAccountPages } from './account.ts';
 import { handleAdminUsers } from './admin-users.ts';
 import { handleHotelPages } from './hotels.ts';
+import { handleWebhooks } from './webhooks.ts';
 import { handleAdminHotels } from './admin-hotels.ts';
 import { hotelStrip } from './hotels/data.ts';
 
@@ -56,6 +57,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
       const p = url.pathname;
       const ctx: Ctx = { db, req, res, url, notify };
       if (p.startsWith('/api/v1/') && await handleUserApi(ctx)) return;
+      if (p.startsWith('/webhooks/') && await handleWebhooks(ctx)) return;
 
       if (p === '/health') {
         const [d] = await db.query(`SELECT count(*) FILTER (WHERE status = 'live')::int AS live FROM deals`);

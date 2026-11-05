@@ -36,6 +36,15 @@ export const config = {
   resendApiKey: env('RESEND_API_KEY'),                       // email via resend.com HTTP API; empty = messages only logged in the outbox
   whatsappToken: env('WHATSAPP_TOKEN'),                      // WhatsApp Cloud API
   whatsappPhoneId: env('WHATSAPP_PHONE_NUMBER_ID'),
+  // WhatsApp message templates (must be approved in Meta WhatsApp Manager; see README "WhatsApp templates")
+  whatsappTemplateLang: env('WHATSAPP_TEMPLATE_LANG', 'en'),
+  whatsappTemplateDeal: env('WHATSAPP_TEMPLATE_DEAL', 'flight_deal_alert'),
+  whatsappTemplateHotel: env('WHATSAPP_TEMPLATE_HOTEL', 'hotel_deal_alert'),
+  whatsappTemplateEnded: env('WHATSAPP_TEMPLATE_ENDED', 'deal_ended'),
+  whatsappTemplateDigest: env('WHATSAPP_TEMPLATE_DIGEST', 'daily_deals'),
+  whatsappTemplateCode: env('WHATSAPP_TEMPLATE_CODE', 'verify_code'),
+  whatsappVerifyToken: env('WHATSAPP_VERIFY_TOKEN'),         // webhook subscription check (you choose it)
+  whatsappAppSecret: env('WHATSAPP_APP_SECRET'),             // checks X-Hub-Signature-256 on webhook calls
   telegramBotUsername: env('TELEGRAM_BOT_USERNAME'),         // for per-user "connect Telegram" links
   vapidPublicKey: env('VAPID_PUBLIC_KEY'),                   // web push
   vapidPrivateKey: env('VAPID_PRIVATE_KEY'),

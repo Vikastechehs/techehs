@@ -411,3 +411,23 @@ DROP INDEX IF EXISTS notifications_once;
 CREATE UNIQUE INDEX IF NOT EXISTS notifications_once_v2
   ON notifications (user_id, coalesce(deal_id, 0), coalesce(hotel_deal_id, 0), kind, coalesce(channel_id, 0))
   WHERE kind <> 'system' AND kind <> 'digest';
+
+-- ============================================================================================
+-- Confirmed channels only, WhatsApp templates, manual deal endings
+-- ============================================================================================
+-- Codes sent to a channel (email, WhatsApp) to confirm the person owns it. Alerts go only to channels with verified_at set.
+CREATE TABLE IF NOT EXISTS channel_verifications (
+  id         serial PRIMARY KEY,
+  channel_id int  NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+  code_hash  text NOT NULL,                        -- sha256 hex of the 6-digit code (or of the link token)
+  attempts   int  NOT NULL DEFAULT 0,
+  expires_at timestamptz NOT NULL,
+  used_at    timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS channel_verifications_channel ON channel_verifications (channel_id, created_at DESC);
+-- Last message the person sent us on this channel. WhatsApp allows free text only within 24 h of it; otherwise templates.
+ALTER TABLE notification_channels ADD COLUMN IF NOT EXISTS last_inbound_at timestamptz;
+-- Who ended a deal: the engine (null) or an admin
+ALTER TABLE deals ADD COLUMN IF NOT EXISTS ended_by text;
+ALTER TABLE hotel_deals ADD COLUMN IF NOT EXISTS ended_by text;
