@@ -2,11 +2,12 @@
 //   node src/cli.ts setup              create .env (if missing), database and routes
 //   node src/cli.ts status             what's in the database and queue
 //   node src/cli.ts sweep-once 50      run 50 real searches end to end (about 500 Scrape.do credits)
+//   node src/cli.ts hotels-once 5      run 5 real hotel searches (Scrape.do Google Hotels); saves the first raw reply to data/hotels-sample.json
 //   node src/cli.ts demo               fill the database with simulated fares and deals, to try the website
 //   node src/cli.ts users              user counts and the 20 newest accounts
 //   node src/cli.ts make-admin <email> give an account the admin role
 //   node src/cli.ts vapid              print a new key pair for web push (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { config, ROOT } from './config.ts';
@@ -17,6 +18,14 @@ import { runWorkers } from './worker.ts';
 import { makeAfterSearch, engineTick } from './engine/deals.ts';
 import { makeSource } from './sources/index.ts';
 import { mockSource } from './sources/mock.ts';
+import { seedHotelCities } from './hotels/cities.ts';
+import { scheduleHotelSweeps, hotelQueueStats } from './hotels/scheduler.ts';
+import { runHotelWorkers } from './hotels/worker.ts';
+import { makeAfterHotelSearch, hotelEngineTick } from './hotels/deals.ts';
+import { rebuildHotelNorms } from './hotels/norms.ts';
+import { mockHotelSource } from './hotels/sources/mock.ts';
+import { scrapeDoHotelSource } from './hotels/sources/scrapedo.ts';
+import type { HotelSource } from './hotels/contract.ts';
 
 const [cmd = 'status', arg] = process.argv.slice(2);
 const log = (m: string) => console.log(m);
@@ -53,12 +62,13 @@ if (cmd === 'setup') {
   }
   const db = await openDb(); await migrate(db);
   const added = await seed(db);
-  log(`Database ready (${db.kind}). Routes added: ${added}.`);
+  const cities = await seedHotelCities(db);
+  log(`Database ready (${db.kind}). Routes added: ${added}. Hotel cities added: ${cities}.`);
   await db.close();
   process.exit(0);
 }
 
-const db = await openDb(); await migrate(db); await seed(db);
+const db = await openDb(); await migrate(db); await seed(db); await seedHotelCities(db);
 const getS = () => getSettings(db);
 
 if (cmd === 'status') {
@@ -76,6 +86,12 @@ if (cmd === 'status') {
     (SELECT count(*) FILTER (WHERE status = 'failed')::int FROM outbox) AS failed FROM users`);
   log(`Users: ${u.users} (${u.active} active, ${u.week} new this week) · city alerts: ${u.alerts} · outbox: ${u.queued} queued, ${u.failed} failed`);
   console.table(await queueStats(db));
+  const [h] = await db.query(`SELECT (SELECT count(*)::int FROM hotel_cities WHERE active) AS cities, (SELECT count(*)::int FROM hotels) AS hotels,
+    (SELECT count(*)::int FROM hotel_prices) AS prices`);
+  const hd = await db.query(`SELECT status, count(*)::int AS n FROM hotel_deals GROUP BY status ORDER BY status`);
+  log(`Hotels (${config.hotelsEnabled ? `on, source ${config.hotelSource}` : 'off'}): cities: ${h.cities} · hotels: ${h.hotels} · prices stored: ${h.prices} · deals: ${hd.map(r => `${r.status} ${r.n}`).join(', ') || 'none'}`);
+  const hq = await hotelQueueStats(db);
+  if (hq.length) console.table(hq);
 } else if (cmd === 'users') {
   const [u] = await db.query(`SELECT count(*) FILTER (WHERE status <> 'deleted')::int AS users, count(*) FILTER (WHERE status = 'active')::int AS active,
     count(*) FILTER (WHERE status = 'disabled')::int AS disabled, count(*) FILTER (WHERE status = 'deleted')::int AS deleted,
@@ -107,23 +123,61 @@ if (cmd === 'status') {
   if (errs.length) { log('Searches that failed and will be retried later:'); console.table(errs); }
   console.table(await db.query(`SELECT r.origin || '-' || r.destination AS route, o.depart::text, o.return_date::text AS return, o.price, o.stops, o.airlines
     FROM price_observations o JOIN routes r ON r.id = o.route_id ORDER BY o.id DESC LIMIT 15`));
+} else if (cmd === 'hotels-once') {
+  // A small, real end-to-end hotel test. The Scrape.do hotels endpoint is unverified, so keep the first raw reply to compare.
+  const n = Number(arg ?? 5);
+  const s = await getS();
+  let saved = false;
+  const samplePath = join(ROOT, 'data', 'hotels-sample.json');
+  const source: HotelSource = config.hotelSource === 'scrapedo'
+    ? scrapeDoHotelSource(config.scrapedoToken, fetch, { onRaw: (body) => {
+        if (saved) return; saved = true;
+        mkdirSync(join(ROOT, 'data'), { recursive: true }); writeFileSync(samplePath, body);
+      } })
+    : mockHotelSource();
+  await scheduleHotelSweeps(db, s, { limit: n });
+  log(`Running ${n} hotel searches with ${source.name}...`);
+  const r = await runHotelWorkers(db, source, s, makeAfterHotelSearch(db, getS, async () => {}), { concurrency: Math.min(5, n), maxJobs: n, log });
+  log(`Done: ${r.done} ok, ${r.failed} failed${r.fatal ? `, stopped: ${r.fatal}` : ''}.`);
+  if (saved) log(`First raw response saved to ${samplePath}`);
+  const errs = await db.query(`SELECT error, count(*)::int AS n FROM hotel_search_jobs WHERE status = 'queued' AND error IS NOT NULL GROUP BY error ORDER BY n DESC LIMIT 5`);
+  if (errs.length) { log('Searches that failed and will be retried later:'); console.table(errs); }
+  const [{ offers }] = await db.query(`SELECT count(*)::int AS offers FROM hotel_prices WHERE job_id IN
+    (SELECT id FROM hotel_search_jobs WHERE status = 'done' AND finished_at > now() - interval '1 hour')`);
+  if (r.done > 0 && offers === 0) {
+    log('WARNING: searches succeeded but 0 hotels were parsed. The Scrape.do hotels endpoint shape is unverified:');
+    log(`  check endpoint/params at top of src/hotels/sources/scrapedo.ts and compare with ${saved ? samplePath : 'the raw response'}.`);
+    process.exitCode = 1;
+  } else {
+    log(`${offers} hotel prices stored.`);
+    console.table(await db.query(`SELECT h.city, left(h.name, 40) AS hotel, h.stars, h.rating, p.checkin::text AS checkin, p.nights, round(p.per_night) AS per_night, p.provider
+      FROM hotel_prices p JOIN hotels h ON h.id = p.hotel_id ORDER BY p.id DESC LIMIT 15`));
+  }
 } else if (cmd === 'demo') {
   if (config.source !== 'mock' && arg !== 'force') { log('Demo uses simulated fares. Remove SCRAPEDO_TOKEN from .env first, or run "demo force".'); process.exit(1); }
   // Simulated fares cost no credits, so lift the daily cap and the credit budget for the demo, then put them back.
   // (With credits counted, the budget spread over the rest of the month allows only ~3,100 searches early in a month,
   // too few for routes to build the 20-price history they need before any deal can appear.)
-  const keep = await db.query(`SELECT key, value FROM settings WHERE key IN ('daily_search_cap', 'credits_per_search')`);
-  await db.query(`UPDATE settings SET value = '100000' WHERE key = 'daily_search_cap'`);
+  const keep = await db.query(`SELECT key, value FROM settings WHERE key IN ('daily_search_cap', 'hotel_daily_search_cap', 'credits_per_search')`);
+  await db.query(`UPDATE settings SET value = '100000' WHERE key IN ('daily_search_cap', 'hotel_daily_search_cap')`);
   await db.query(`UPDATE settings SET value = '0' WHERE key = 'credits_per_search'`);
   const s = await getS();
   await scheduleSweeps(db, s);
   log('Scanning simulated fares for all 300 routes (about a minute)...');
   const r = await runWorkers(db, mockSource(), s, makeAfterSearch(db, getS, async () => {}), { concurrency: 50, drain: true, log });
   await engineTick(db, s, async () => {});
+  // Hotels: the 46 cities' check-in calendar on simulated hotels (always simulated in the demo)
+  await scheduleHotelSweeps(db, s);
+  log('Scanning simulated hotels for all hotel cities...');
+  const hr = await runHotelWorkers(db, mockHotelSource(), s, makeAfterHotelSearch(db, getS, async () => {}), { concurrency: 40, drain: true, log });
+  await hotelEngineTick(db, s, async () => {});
+  await rebuildHotelNorms(db, s);
   for (const k of keep) await db.query(`UPDATE settings SET value = $2 WHERE key = $1`, [k.key, k.value]);
   const [c] = await db.query(`SELECT count(*) FILTER (WHERE status = 'review')::int AS review, count(*) FILTER (WHERE status = 'live')::int AS live FROM deals`);
+  const [hc] = await db.query(`SELECT count(*) FILTER (WHERE status = 'review')::int AS review, count(*) FILTER (WHERE status = 'live')::int AS live FROM hotel_deals`);
   log(`${r.done} searches. Deals waiting for review: ${c.review}, live: ${c.live}. Start the site and open /admin to publish them.`);
+  log(`${hr.done} hotel searches. Hotel deals waiting for review: ${hc.review}, live: ${hc.live}.`);
 } else {
-  log('Commands: setup | status | sweep-once [n] | demo | users | make-admin <email> | vapid');
+  log('Commands: setup | status | sweep-once [n] | hotels-once [n] | demo | users | make-admin <email> | vapid');
 }
 await db.close();

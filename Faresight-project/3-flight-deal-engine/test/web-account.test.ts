@@ -230,3 +230,47 @@ test('password sign-up, sign-out and sign-in', async () => {
   r = await b.req('/signin/password', { form: { csrf: b.csrfOf(html), email: 'pw@example.com', password: 'correct horse 1' } });
   assert.equal(r.headers.get('location'), '/account');
 });
+
+test('hotels: pick hotel cities while signed out, manage hotel alerts on /account, saved hotels on /saved', async () => {
+  await db.query(`INSERT INTO hotel_cities (code, name, country, region, query) VALUES ('ZWB','Webkok','TH','seAsia','Webkok'), ('ZWG','Webgoa','IN','india','Webgoa')
+    ON CONFLICT (code) DO NOTHING`);
+  const b = browser();
+  const html = await (await b.req('/alerts')).text();
+  assert.match(html, /Hotels too/);
+  assert.match(html, /name="hotel_city" value="ZWB"/);
+  assert.ok(html.indexOf('>India<') < html.indexOf('>Southeast Asia<'), 'cities grouped by region, India first');
+  // Hotel cities alone are enough
+  const r1 = await b.req('/alerts', { form: { csrf: b.csrfOf(html), hotel_city: ['ZWB', 'NOPE'], hotel_pct: '35', hotel_stars: '4', ch_email: '1', email_freq: 'instant', email: 'hotelpages@example.com' } });
+  assert.equal(r1.status, 303);
+  const codePage = await (await b.req(r1.headers.get('location')!)).text();
+  const r2 = await b.req('/signin/code?next=%2Falerts%2Fdone', { form: { csrf: b.csrfOf(codePage), email: 'hotelpages@example.com', code: await lastCode('hotelpages@example.com') } });
+  assert.equal(r2.headers.get('location'), '/alerts/done');
+  assert.match(await (await b.req('/alerts/done')).text(), /Hotel deals: at least 35% below normal in Webkok/);
+  const [u] = await db.query(`SELECT id FROM users WHERE email = 'hotelpages@example.com'`);
+  const subs = await db.query(`SELECT city, min_saving_pct, min_stars FROM hotel_alert_subscriptions WHERE user_id = $1`, [u.id]);
+  assert.deepEqual(subs.map(s => [s.city, s.min_saving_pct, s.min_stars]), [['ZWB', 35, 4]]);
+
+  // /account: hotel alerts section, add one, edit one, delete one
+  let acc = await (await b.req('/account')).text();
+  assert.match(acc, /id="hotel-alerts"/); assert.match(acc, /Hotels in Webkok/);
+  let r = await b.req('/account/hotel-alert', { form: { csrf: b.csrfOf(acc), city: 'ZWG', pct: '50', min_stars: '', active: '1' } });
+  assert.equal(r.headers.get('location'), '/account#hotel-alerts');
+  r = await b.req('/account/hotel-alert', { form: { csrf: b.csrfOf(acc), city: 'ZWB', pct: '25', min_stars: '5', max_per_night: '6000', active: '1' } });
+  const after = await db.query(`SELECT city, min_saving_pct, min_stars, max_per_night FROM hotel_alert_subscriptions WHERE user_id = $1 ORDER BY city`, [u.id]);
+  assert.deepEqual(after.map(s => [s.city, s.min_saving_pct, s.min_stars, s.max_per_night]), [['ZWB', 25, 5, 6000], ['ZWG', 50, null, null]]);
+  await b.req('/account/hotel-alert', { form: { csrf: b.csrfOf(acc), city: 'ZWG', delete: '1' } });
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM hotel_alert_subscriptions WHERE user_id = $1`, [u.id]))[0].n, 1);
+
+  // Saved hotel deals show on /account and /saved, and can be removed from /saved
+  const [h] = await db.query(`INSERT INTO hotels (city, source, source_id, name, stars) VALUES ('ZWB','mock','web-1','Orchid Stay',4) RETURNING id`);
+  const [hd] = await db.query(`INSERT INTO hotel_deals (hotel_id, month, per_night, normal_per_night, saving_pct, currency, status)
+    VALUES ($1, date_trunc('month', current_date + 30)::date, 3200, 4900, 35, 'INR', 'live') RETURNING id`, [h.id]);
+  await db.query(`INSERT INTO saved_hotel_deals (user_id, hotel_deal_id) VALUES ($1,$2)`, [u.id, hd.id]);
+  acc = await (await b.req('/account')).text();
+  assert.match(acc, /Saved hotel deals/); assert.match(acc, new RegExp(`href="/hotel-deal/${hd.id}">Orchid Stay, Webkok`));
+  const saved = await (await b.req('/saved')).text();
+  assert.match(saved, /Saved hotel deals/); assert.match(saved, /Orchid Stay/); assert.match(saved, /₹3,200/);
+  r = await b.req(`/saved/hotel/${hd.id}/remove`, { form: { csrf: b.csrfOf(saved) } });
+  assert.equal(r.status, 303);
+  assert.equal((await db.query(`SELECT count(*)::int AS n FROM saved_hotel_deals WHERE user_id = $1`, [u.id]))[0].n, 0);
+});

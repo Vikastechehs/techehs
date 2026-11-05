@@ -57,6 +57,12 @@ test('Google Hotels parser: SerpApi-style properties to offers', () => {
   assert.equal(a.lat, 13.72); assert.equal(a.imageUrl, 'https://img/1.jpg'); assert.equal(a.area, 'Riverside'); assert.equal(a.provider, 'Booking.com');
   assert.equal(b.stars, 3, 'class parsed from text'); assert.equal(b.rating, 7.8); assert.equal(b.perNight, 2000); assert.equal(b.total, 6000);
   assert.equal(parseGoogleHotels({}, 2).offers.length, 0);
+  // Tolerant of other shapes: hotels[] list, prices as "₹3,200" strings, rating already out of 10
+  const alt = parseGoogleHotels({ hotels: [{ name: 'Alt Hotel', hotel_id: 'h9', stars: '4', rating: 8.6, price: '₹3,200' }] }, 2);
+  assert.equal(alt.offers.length, 1);
+  assert.equal(alt.offers[0].perNight, 3200); assert.equal(alt.offers[0].total, 6400);
+  assert.equal(alt.offers[0].rating, 8.6); assert.equal(alt.offers[0].stars, 4); assert.equal(alt.offers[0].sourceId, 'h9');
+  assert.equal(parseGoogleHotels({ results: [{ title: 'R', total_rate: { lowest: '₹9,000' } }] }, 3).offers[0].perNight, 3000);
 });
 
 test('Scrape.do hotels: request parameters, 429 retried, 402 stops', async () => {
