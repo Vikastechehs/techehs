@@ -144,6 +144,7 @@ test('WhatsApp: adding the channel sends a code through the code template; wrong
   await startChannelVerification(db, u.id, c2.id);
   const old = await codeFor(c2.id);
   await startChannelVerification(db, u.id, c2.id);
+  await startChannelVerification(db, u.id, c2.id);
   const fresh = await codeFor(c2.id);
   if (old !== fresh) assert.equal(await confirmChannel(db, u.id, c2.id, old), null);
 
@@ -217,10 +218,10 @@ test('changing the phone number starts WhatsApp confirmation', async () => {
   const v = await makeUser();
   const wa = await channel(v.id, 'whatsapp', '+919800000012', false);
   await updateProfile(db, v.id, { phone: '+919800000012' });
-  assert.equal((await sends(wa.id)).length, 1);
+  assert.equal((await sends(wa)).length, 1);
   // Saving the profile again with the same number sends nothing
   await updateProfile(db, v.id, { phone: '+919800000012', name: 'V' });
-  assert.equal((await sends(wa.id)).length, 1);
+  assert.equal((await sends(wa)).length, 1);
 });
 
 test('daily digest skips unconfirmed channels', async () => {
