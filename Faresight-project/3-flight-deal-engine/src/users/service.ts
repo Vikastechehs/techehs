@@ -30,6 +30,8 @@ export type ProfilePatch = Partial<Pick<User, 'name' | 'phone' | 'home_airport' 
 export class UserError extends Error { status: number; constructor(message: string, status = 400) { super(message); this.status = status; } }
 
 export const CODE_TTL_MIN = 10, CODE_MAX_ATTEMPTS = 5, CODES_PER_HOUR = 5, PASSWORD_MIN = 8;
+/** Channel confirmation: codes work 15 minutes with 5 tries; at most 5 sends per channel per hour; email links work 24 hours. */
+export const CHANNEL_CODE_TTL_MIN = 15, CHANNEL_CODE_MAX_ATTEMPTS = 5, CHANNEL_CODES_PER_HOUR = 5, CHANNEL_LINK_TTL_HOURS = 24;
 const MAX_CHANNELS = 20, MAX_WATCHES = 100;
 
 // --- Helpers: validation and row mapping ---
@@ -136,6 +138,8 @@ export async function registerWithPassword(db: Db, input: { email: string; passw
   if (!r) throw new UserError('An account with this email already exists. Sign in instead.', 409);
   await addEmailChannel(db, r.id, e, false);
   await logEvent(db, r.id, 'signup', { method: 'password' });
+  const [ec] = await db.query(`SELECT id FROM notification_channels WHERE user_id = $1 AND kind = 'email' AND address = $2`, [r.id, e]);
+  if (ec) await autoVerify(db, r.id, ec.id);
   await logEvent(db, r.id, 'login', { method: 'password', ip: meta.ip ?? null });
   return startSession(db, r.id, meta);
 }
@@ -221,6 +225,7 @@ export async function updateProfile(db: Db, userId: number, patch: ProfilePatch)
     await db.query(`UPDATE users SET ${keys.map((k, i) => `${k} = $${i + 2}`).join(', ')}, updated_at = now() WHERE id = $1`, [userId, ...keys.map(k => set[k])]);
     if ('marketing_consent' in set && set.marketing_consent !== before.marketing_consent)
       await logEvent(db, userId, 'consent', { marketing_consent: set.marketing_consent });
+    if ('phone' in set && set.phone && set.phone !== before.phone) await onPhoneChanged(db, userId, String(set.phone));
   }
   return (await getUser(db, userId))!;
 }
@@ -264,7 +269,13 @@ export async function listChannels(db: Db, userId: number): Promise<Channel[]> {
 export async function addChannel(db: Db, userId: number, c: { kind: Channel['kind']; address: string; meta?: unknown; frequency?: Channel['frequency'] }): Promise<Channel> {
   let address: string, meta: unknown = null, verified = false;
   switch (c.kind) {
-    case 'email': address = normEmail(c.address); break;
+    case 'email': {
+      address = normEmail(c.address);
+      // The verified sign-in email is already confirmed (code sign-in proves it)
+      const [u] = await db.query(`SELECT 1 FROM users WHERE id = $1 AND lower(email) = $2 AND email_verified_at IS NOT NULL`, [userId, address]);
+      verified = !!u;
+      break;
+    }
     case 'whatsapp': address = normPhone(c.address); break;
     case 'telegram':
       address = String(c.address ?? '').trim();
@@ -286,8 +297,11 @@ export async function addChannel(db: Db, userId: number, c: { kind: Channel['kin
   if (n.n >= MAX_CHANNELS) throw new UserError('Too many channels; remove one first');
   const [r] = await db.query(`INSERT INTO notification_channels (user_id, kind, address, meta, frequency, verified_at)
     VALUES ($1,$2,$3,$4,$5, CASE WHEN $6::boolean THEN now() END)
-    ON CONFLICT (user_id, kind, address) DO UPDATE SET active = true, frequency = EXCLUDED.frequency, meta = coalesce(EXCLUDED.meta, notification_channels.meta)
+    ON CONFLICT (user_id, kind, address) DO UPDATE SET active = true, frequency = EXCLUDED.frequency, meta = coalesce(EXCLUDED.meta, notification_channels.meta),
+      verified_at = coalesce(notification_channels.verified_at, EXCLUDED.verified_at)
     RETURNING ${CHANNEL_COLS}`, [userId, c.kind, address, meta == null ? null : JSON.stringify(meta), frequency, verified]);
+  // Email and WhatsApp must be confirmed before alerts go there: send a code now (unless one is already on its way)
+  if (!r.verified_at && (c.kind === 'email' || c.kind === 'whatsapp')) await autoVerify(db, userId, r.id);
   return plain<Channel>(r);
 }
 export async function updateChannel(db: Db, userId: number, id: number, patch: { active?: boolean; frequency?: Channel['frequency'] }): Promise<Channel> {
@@ -301,6 +315,108 @@ export async function updateChannel(db: Db, userId: number, id: number, patch: {
 export async function removeChannel(db: Db, userId: number, id: number): Promise<void> {
   const r = await db.query(`DELETE FROM notification_channels WHERE user_id = $1 AND id = $2 RETURNING id`, [userId, id]);
   if (!r.length) throw new UserError('Channel not found', 404);
+}
+
+// --- Channel confirmation: alerts go only to channels with verified_at set ---
+// Telegram channels are confirmed when connected through the bot, push channels when the browser subscribes.
+// Email and WhatsApp get a 6-digit code (email also a one-tap link). Rows in channel_verifications hold sha256 hashes:
+// code rows hold sha256(code), link rows hold 'link:' + sha256(token).
+const LINK = 'link:';
+async function ownChannel(db: Db, userId: number, channelId: number) {
+  const [c] = Number.isInteger(channelId) ? await db.query(`SELECT c.${CHANNEL_COLS.split(', ').join(', c.')} FROM notification_channels c
+    JOIN users u ON u.id = c.user_id WHERE c.id = $1 AND c.user_id = $2 AND u.status = 'active'`, [channelId, userId]) : [];
+  if (!c) throw new UserError('Channel not found', 404);
+  return c;
+}
+async function markVerified(db: Db, channelId: number): Promise<Channel> {
+  const [c] = await db.query(`UPDATE notification_channels SET verified_at = coalesce(verified_at, now()) WHERE id = $1 RETURNING user_id, ${CHANNEL_COLS}`, [channelId]);
+  await db.query(`UPDATE channel_verifications SET used_at = now() WHERE channel_id = $1 AND used_at IS NULL`, [channelId]);
+  // Confirming the sign-in email confirms the account's email too
+  if (c.kind === 'email') await db.query(`UPDATE users SET email_verified_at = now(), updated_at = now() WHERE id = $1 AND lower(email) = lower($2) AND email_verified_at IS NULL`, [c.user_id, c.address]);
+  await logEvent(db, c.user_id, 'channel_verified', { channel_id: channelId, kind: c.kind });
+  const { user_id: _, ...channel } = c;
+  return plain<Channel>(channel);
+}
+
+/**
+ * Sends a confirmation code to an email or WhatsApp channel: 6 digits, 15 minutes, 5 tries; emails also carry a one-tap
+ * link to /confirm. At most 5 sends per channel per hour (UserError 429). An already confirmed channel sends nothing.
+ */
+export async function startChannelVerification(db: Db, userId: number, channelId: number): Promise<{ sent: boolean; verified: boolean }> {
+  const c = await ownChannel(db, userId, channelId);
+  if (c.verified_at) return { sent: false, verified: true };
+  if (c.kind !== 'email' && c.kind !== 'whatsapp')
+    throw new UserError(c.kind === 'telegram' ? 'Telegram is confirmed when you connect it from Telegram.' : 'App notifications are confirmed when you turn them on.');
+  const [n] = await db.query(`SELECT count(*)::int AS n FROM channel_verifications WHERE channel_id = $1 AND code_hash NOT LIKE 'link:%'
+    AND created_at > now() - interval '1 hour'`, [c.id]);
+  if (n.n >= CHANNEL_CODES_PER_HOUR) throw new UserError('Too many codes sent. Try again in an hour.', 429);
+  // A new code replaces the old ones
+  await db.query(`UPDATE channel_verifications SET used_at = now() WHERE channel_id = $1 AND used_at IS NULL AND code_hash NOT LIKE 'link:%'`, [c.id]);
+  const code = newCode();
+  await db.query(`INSERT INTO channel_verifications (channel_id, code_hash, expires_at) VALUES ($1, $2, now() + make_interval(mins => $3))`,
+    [c.id, sha256(code), CHANNEL_CODE_TTL_MIN]);
+  if (c.kind === 'whatsapp') {
+    await enqueue(db, { channel: 'whatsapp', to: c.address, body: `Your ${config.siteName} code: ${code}`,
+      meta: { template: 'code', params: [code], purpose: 'verify', channel_id: c.id, user_id: userId } });
+  } else {
+    const token = newToken();
+    await db.query(`INSERT INTO channel_verifications (channel_id, code_hash, expires_at) VALUES ($1, $2, now() + make_interval(hours => $3))`,
+      [c.id, LINK + sha256(token), CHANNEL_LINK_TTL_HOURS]);
+    const link = `${config.publicUrl}/confirm?c=${c.id}&t=${token}`;
+    await enqueue(db, { channel: 'email', to: c.address, subject: 'Confirm your email for alerts',
+      body: `Confirm this email to get ${config.siteName} deal alerts here.\n\nTap to confirm: ${link}\n\nOr enter this code: ${code} (it works for ${CHANNEL_CODE_TTL_MIN} minutes).\n\nIf you didn't ask for alerts, you can ignore this email.`,
+      meta: { kind: 'channel_verify', purpose: 'verify', channel_id: c.id, user_id: userId } });
+  }
+  return { sent: true, verified: false };
+}
+
+/** Sends a code unless one sent in the last minute is still waiting; never fails the caller (rate limit is swallowed). */
+async function autoVerify(db: Db, userId: number, channelId: number) {
+  const [recent] = await db.query(`SELECT 1 FROM channel_verifications WHERE channel_id = $1 AND used_at IS NULL AND expires_at > now()
+    AND code_hash NOT LIKE 'link:%' AND created_at > now() - interval '1 minute'`, [channelId]);
+  if (recent) return;
+  try { await startChannelVerification(db, userId, channelId); }
+  catch (e) { if (!(e instanceof UserError)) throw e; }
+}
+
+/** A new phone number: a WhatsApp channel for it is (added if the user uses WhatsApp and) sent a confirmation code. */
+async function onPhoneChanged(db: Db, userId: number, phone: string) {
+  const wa = await db.query(`SELECT id, address, frequency, verified_at FROM notification_channels WHERE user_id = $1 AND kind = 'whatsapp' ORDER BY id`, [userId]);
+  const same = wa.find(w => w.address === phone);
+  if (same) { if (!same.verified_at) await autoVerify(db, userId, same.id); return; }
+  if (!wa.length) return;
+  await addChannel(db, userId, { kind: 'whatsapp', address: phone, frequency: wa[wa.length - 1].frequency });
+}
+
+/** Checks a confirmation code. Returns the confirmed channel, or null when the code is wrong or expired (429 after 5 wrong tries). */
+export async function confirmChannel(db: Db, userId: number, channelId: number, code: string): Promise<Channel | null> {
+  const c = await ownChannel(db, userId, channelId);
+  if (c.verified_at) return plain<Channel>(c);
+  const [v] = await db.query(`SELECT id, code_hash, attempts FROM channel_verifications WHERE channel_id = $1 AND used_at IS NULL
+    AND expires_at > now() AND code_hash NOT LIKE 'link:%' ORDER BY created_at DESC, id DESC LIMIT 1`, [c.id]);
+  if (!v) return null;
+  if (v.attempts >= CHANNEL_CODE_MAX_ATTEMPTS) throw new UserError('Too many wrong tries. Ask for a new code.', 429);
+  await db.query(`UPDATE channel_verifications SET attempts = attempts + 1 WHERE id = $1`, [v.id]);
+  if (!sameHash(sha256(String(code ?? '').replace(/\s/g, '')), v.code_hash)) return null;
+  const used = await db.query(`UPDATE channel_verifications SET used_at = now() WHERE id = $1 AND used_at IS NULL RETURNING id`, [v.id]);
+  if (!used.length) return null;
+  return markVerified(db, c.id);
+}
+
+/** The one-tap link from a confirmation email (no sign-in needed). True when the channel is (now) confirmed. */
+export async function confirmChannelByLink(db: Db, channelId: number, token: string): Promise<boolean> {
+  const t = String(token ?? '');
+  if (!Number.isInteger(channelId) || !t || t.length > 100) return false;
+  const want = LINK + sha256(t);
+  const rows = await db.query(`SELECT v.id, v.code_hash, v.used_at, c.verified_at FROM channel_verifications v
+    JOIN notification_channels c ON c.id = v.channel_id JOIN users u ON u.id = c.user_id
+    WHERE v.channel_id = $1 AND v.code_hash LIKE 'link:%' AND v.expires_at > now() AND u.status = 'active'`, [channelId]);
+  const hit = rows.find(r => sameHash(want, r.code_hash));
+  if (!hit) return false;
+  if (hit.verified_at) return true;   // tapped twice
+  if (hit.used_at) return false;
+  await markVerified(db, channelId);
+  return true;
 }
 
 // --- Route watches ---

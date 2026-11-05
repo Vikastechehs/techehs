@@ -1,6 +1,7 @@
 // Per-user hotel deal notifications (owned by the user-data module). Same conventions as fanout.ts: one notifications
 // row per user and channel (kind hotel_live / hotel_ended, hotel_deal_id set), instant channels get an outbox message
 // whose meta carries notification_ids so deliverOutbox updates the rows; daily channels wait for the digest.
+// Only confirmed channels (verified_at set) get anything, "ended" messages included.
 import type { Db } from '../db.ts';
 import { enqueue, type OutChannel } from './outbox.ts';
 import { renderHotelNotice, type HotelNoticeKind } from './render.ts';
@@ -27,7 +28,7 @@ async function fanOut(db: Db, d: any, targets: Targets): Promise<HotelFanoutResu
   if (!targets.size) return res;
   const channels = await db.query<ChannelRow>(`
     SELECT c.id, c.user_id, c.kind, c.address, c.frequency FROM notification_channels c JOIN users u ON u.id = c.user_id
-    WHERE c.user_id = ANY($1::int[]) AND c.active AND u.status = 'active' ORDER BY c.id`, [[...targets.keys()]]);
+    WHERE c.user_id = ANY($1::int[]) AND c.active AND c.verified_at IS NOT NULL AND u.status = 'active' ORDER BY c.id`, [[...targets.keys()]]);
   for (const c of channels) {
     const t = targets.get(c.user_id)!;
     if (t.channels && !t.channels.has(c.id)) continue;

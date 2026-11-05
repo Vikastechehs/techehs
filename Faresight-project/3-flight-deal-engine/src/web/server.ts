@@ -2,7 +2,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { config } from '../config.ts';
 import { getSettings, type Db } from '../db.ts';
-import { reviewDeal, type Notify } from '../engine/deals.ts';
+import { endDeal, reviewDeal, type Notify } from '../engine/deals.ts';
 import { bookingUrl, partnerName } from '../engine/links.ts';
 import { money } from '../engine/notify.ts';
 import { creditsThisMonth, queueStats } from '../scheduler.ts';
@@ -16,6 +16,7 @@ import { handleHotelPages } from './hotels.ts';
 import { handleWebhooks } from './webhooks.ts';
 import { handleAdminHotels } from './admin-hotels.ts';
 import { hotelStrip } from './hotels/data.ts';
+import { endDealForm, manualEndReason } from './admin-end.ts';
 
 const DEAL_LIST_SQL = `
   SELECT d.*, r.origin, r.destination, r.max_stops, ao.city AS from_city, ad.city AS to_city,
@@ -125,8 +126,17 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         if (!isAdmin(req)) return send(res, 401, 'Admin login required', 'text/plain', { 'www-authenticate': 'Basic realm="admin"' });
         const act = p.match(/^\/admin\/deal\/(\d+)\/(approve|reject)$/);
         if (act && req.method === 'POST') {
-          await reviewDeal(db, Number(act[1]), act[2] === 'approve', notify);
+          const done = await reviewDeal(db, Number(act[1]), act[2] === 'approve', notify);
+          // Rejecting a deal that is already live ends it properly, so users who were told get the "Ended" message
+          if (!done && act[2] === 'reject') await endDeal(db, Number(act[1]), manualEndReason('flight', 'other'));
           res.writeHead(303, { location: '/admin' }); return res.end();
+        }
+        const end = p.match(/^\/admin\/deal\/(\d{1,9})\/end$/);
+        if (end) {
+          if (req.method !== 'POST') return send(res, 405, 'Use POST', 'text/plain', { allow: 'POST' });
+          const form = await readForm(req);
+          await endDeal(db, Number(end[1]), manualEndReason('flight', form.get('reason') ?? 'other', form.get('note') ?? ''));
+          res.writeHead(303, { location: '/admin#live' }); return res.end();
         }
         if (p === '/admin/settings' && req.method === 'POST') {
           const form = await readForm(req);
@@ -146,6 +156,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         const credits = await creditsThisMonth(db);
         const queue = await queueStats(db);
         const review = await db.query(`${DEAL_LIST_SQL} WHERE d.status = 'review' ORDER BY d.saving_pct DESC`);
+        const live = await db.query(`${DEAL_LIST_SQL} WHERE d.status = 'live' ORDER BY d.published_at DESC NULLS LAST, d.id DESC LIMIT 200`);
         const recent = await db.query(`${DEAL_LIST_SQL} WHERE d.status IN ('live','expired','rejected') ORDER BY coalesce(d.expired_at, d.published_at, d.first_seen) DESC LIMIT 15`);
         const [hrev] = await db.query(`SELECT count(*)::int AS n FROM hotel_deals WHERE status = 'review'`);
         const stat = (label: string, v: unknown) => `<span class="stat"><b>${esc(v)}</b>${esc(label)}</span>`;
@@ -161,6 +172,13 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
               <td><form method="post" action="/admin/deal/${d.id}/approve" style="display:inline"><button class="btn">Publish</button></form>
                   <form method="post" action="/admin/deal/${d.id}/reject" style="display:inline"><button class="btn secondary">Reject</button></form></td></tr>`).join('')}
             </tbody></table>` : '<p class="meta">Nothing waiting.</p>'}
+          <h2 id="live">Live deals (${live.length})</h2>
+          ${live.length ? `<p class="meta">Ending a deal tells users who were alerted or saved it, with the reason you pick.</p>
+            <table><thead><tr><th>Route</th><th>Price</th><th>Below</th><th>Published</th><th>Verified</th><th></th></tr></thead><tbody>
+            ${live.map(d => `<tr><td><a href="/deal/${d.id}">${esc(d.origin)} → ${esc(d.destination)}</a><div class="meta">${esc(d.from_city)} → ${esc(d.to_city)}</div></td>
+              <td>${money(d.price, d.currency)}</td><td>${d.saving_pct}%</td><td class="meta">${esc(ago(d.published_at))}</td><td class="meta">${esc(ago(d.last_verified))}</td>
+              <td>${endDealForm('flight', `/admin/deal/${d.id}/end`)}</td></tr>`).join('')}
+            </tbody></table>` : '<p class="meta">No live deals.</p>'}
           <h2>Recent decisions</h2>
           <table><thead><tr><th>Route</th><th>Status</th><th>Price</th><th>Below</th><th>Note</th></tr></thead><tbody>
           ${recent.map(d => `<tr><td>${esc(d.origin)} → ${esc(d.destination)}</td><td>${esc(d.status)}</td><td>${money(d.price, d.currency)}</td><td>${d.saving_pct}%</td><td class="meta">${esc(d.reason ?? (d.status === 'live' ? `verified ${ago(d.last_verified)}` : ''))}</td></tr>`).join('')}

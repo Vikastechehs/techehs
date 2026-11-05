@@ -31,7 +31,7 @@ export async function sendDailyDigests(db: Db, opts: DigestOptions = {}): Promis
     WHERE n.status = 'queued' AND (
         (n.kind IN ('deal_live','route_watch','deal_ended') AND n.deal_id IS NOT NULL)
         OR (n.kind IN ('hotel_live','hotel_ended') AND n.hotel_deal_id IS NOT NULL))
-      AND c.active AND c.frequency = 'daily' AND u.status = 'active'
+      AND c.active AND c.verified_at IS NOT NULL AND c.frequency = 'daily' AND u.status = 'active'
       AND NOT EXISTS (SELECT 1 FROM outbox o WHERE o.meta -> 'notification_ids' @> to_jsonb(n.id))
     ORDER BY c.id, n.id`);
   const byChannel = new Map<number, typeof pending>();

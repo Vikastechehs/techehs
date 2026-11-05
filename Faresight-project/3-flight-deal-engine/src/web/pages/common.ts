@@ -1,7 +1,7 @@
 // Shared helpers for the user-facing pages: per-request state, CSRF tokens, flash messages, signed cookies.
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { config } from '../../config.ts';
-import { SESSION_COOKIE, userFromRequest, UserError, type User } from '../../users/service.ts';
+import { SESSION_COOKIE, userFromRequest, UserError, type Channel, type User } from '../../users/service.ts';
 import { esc, layout } from '../html.ts';
 import { cookies, HttpError, readForm, send, setCookie, type Ctx } from '../http.ts';
 
@@ -112,3 +112,19 @@ export async function attempt(p: P, back: string, fn: () => Promise<string | voi
 
 export const opt = (v: string, label: string, sel: unknown) => `<option value="${esc(v)}"${String(sel ?? '') === v ? ' selected' : ''}>${esc(label)}</option>`;
 export const errMsg = (e: unknown) => e instanceof UserError ? e.message : 'Something went wrong';
+
+/**
+ * Small inline forms under a channel that isn't confirmed yet: enter the code, or send a (new) one. `back` is where the
+ * forms return to (a same-site path). Confirmed channels get nothing.
+ */
+export function channelConfirmForms(p: P, c: Channel, back: string) {
+  if (c.verified_at) return '';
+  if (c.kind !== 'email' && c.kind !== 'whatsapp')
+    return `<p class="meta">Not confirmed: ${c.kind === 'telegram' ? 'connect Telegram again' : 'turn app notifications on again'} to get alerts here.</p>`;
+  const f = csrfField(p) + `<input type="hidden" name="back" value="${esc(back)}">`;
+  return `<div class="row" style="margin-top:6px"><span class="meta" style="margin:0">Not confirmed: no alerts go here until you enter the code${c.kind === 'email' ? ' or tap the link in the email' : ''}.</span>
+    <form method="post" action="/account/channel/${c.id}/confirm" class="row">${f}
+      <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="6-digit code" aria-label="Confirmation code" required style="width:130px">
+      <button class="btn secondary">Confirm</button></form>
+    <form method="post" action="/account/channel/${c.id}/verify">${f}<button class="btn secondary">Send code</button></form></div>`;
+}

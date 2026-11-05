@@ -9,7 +9,7 @@ import { handleSaved } from './pages/saved.ts';
 import { handleExplore } from './pages/explore.ts';
 import { handlePwa } from './pages/pwa.ts';
 
-const MINE = /^\/(signin|signup|signout|alerts|account|saved|watch|unsubscribe|route|explore|manifest\.webmanifest|sw\.js|push|offline|static)(\/|$)|^\/deal\/\d+\/(save|unsave)$/;
+const MINE = /^\/(signin|signup|signout|alerts|account|saved|watch|unsubscribe|confirm|route|explore|manifest\.webmanifest|sw\.js|push|offline|static)(\/|$)|^\/deal\/\d+\/(save|unsave)$/;
 
 export const handleAccountPages: Handler = async ctx => {
   if (!MINE.test(ctx.url.pathname)) return false;

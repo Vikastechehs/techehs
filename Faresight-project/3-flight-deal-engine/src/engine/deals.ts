@@ -135,6 +135,23 @@ export async function maybeFinishDeep(db: Db, s: Settings, dealId: number, notif
   if (live) await notify(dealId);
 }
 
+/**
+ * Ends a deal by hand (e.g. an admin saw it sold out). A live deal becomes 'expired' and the ended hook runs, so users
+ * who were alerted or saved it get the "Ended" message; a deal still in review is just rejected (nobody was told).
+ * Queued searches for the deal are cancelled. Returns false (and does nothing) if the deal is not live or in review.
+ */
+export async function endDeal(db: Db, dealId: number, reason: string, by = 'admin'): Promise<boolean> {
+  const rows = await db.query(`
+    UPDATE deals SET status = CASE WHEN status = 'live' THEN 'expired' ELSE 'rejected' END,
+           expired_at = now(), reason = $2, ended_by = $3
+    WHERE id = $1 AND status IN ('live','review') RETURNING status`, [dealId, reason, by]);
+  if (!rows.length) return false;
+  await db.query(`UPDATE search_jobs SET status = 'failed', error = 'deal ended', finished_at = now()
+    WHERE deal_id = $1 AND status = 'queued'`, [dealId]);
+  if (rows[0].status === 'expired') await dealEnded(dealId);
+  return true;
+}
+
 /** Admin decision on a deal waiting for review. */
 export async function reviewDeal(db: Db, dealId: number, approve: boolean, notify: Notify) {
   const rows = await db.query(`
@@ -185,7 +202,7 @@ export async function maybeFinishVerify(db: Db, s: Settings, dealId: number) {
     const saving = Math.round((1 - price / deal.normal_price) * 1000) / 10;
     await db.query(`UPDATE deals SET price = $2, saving_pct = $3, last_verified = now() WHERE id = $1`, [dealId, price, saving]);
   } else {
-    const ended = await db.query(`UPDATE deals SET status = 'expired', expired_at = now(), reason = $2 WHERE id = $1 AND status = 'live' RETURNING id`,
+    const ended = await db.query(`UPDATE deals SET status = 'expired', expired_at = now(), reason = $2, ended_by = 'engine' WHERE id = $1 AND status = 'live' RETURNING id`,
       [dealId, best == null ? 'no flights found at re-check' : `price rose to ${best} (shown ${deal.price})`]);
     if (ended.length) await dealEnded(dealId);
   }
@@ -194,7 +211,7 @@ export async function maybeFinishVerify(db: Db, s: Settings, dealId: number) {
 /** Live deals whose date pairs have all passed are expired. */
 export async function expirePastDeals(db: Db) {
   const rows = await db.query(`
-    UPDATE deals d SET status = 'expired', expired_at = now(), reason = 'all dates passed'
+    UPDATE deals d SET status = 'expired', expired_at = now(), reason = 'all dates passed', ended_by = 'engine'
     WHERE status IN ('live','review') AND NOT EXISTS (SELECT 1 FROM deal_dates dd WHERE dd.deal_id = d.id AND dd.depart >= current_date + 1)
     RETURNING id`);
   for (const r of rows) await dealEnded(r.id);

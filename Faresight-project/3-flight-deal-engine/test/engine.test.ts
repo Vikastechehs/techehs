@@ -94,9 +94,11 @@ test('engine finds sale fares, confirms them with a deep check, and expires them
   const t = await engineTick(db, s, async () => {});
   assert.ok(t.verifies > 0);
   await runWorkers(db, mockSource({ priceFactor: () => 1.3 }), s, after, { concurrency: 50, drain: true });
-  const [c] = await db.query(`SELECT count(*) FILTER (WHERE status = 'live')::int AS live, count(*) FILTER (WHERE status = 'expired')::int AS expired FROM deals`);
+  const [c] = await db.query(`SELECT count(*) FILTER (WHERE status = 'live')::int AS live, count(*) FILTER (WHERE status = 'expired')::int AS expired,
+    count(*) FILTER (WHERE status = 'expired' AND ended_by = 'engine')::int AS by_engine FROM deals`);
   assert.equal(c.live, 0);
   assert.equal(c.expired, live.length);
+  assert.equal(c.by_engine, live.length, 'engine expiries are marked ended_by engine');
   await db.close();
 });
 

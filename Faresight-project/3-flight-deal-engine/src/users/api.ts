@@ -129,6 +129,13 @@ async function route({ db, req, res, url }: Ctx, path: string, method: string): 
   p = path.match(/^me\/channels\/(\d+)$/);
   if (p && method === 'PATCH') return ok({ channel: await U.updateChannel(db, uid, Number(p[1]), { active: body.active, frequency: body.frequency }) });
   if (p && method === 'DELETE') { await U.removeChannel(db, uid, Number(p[1])); return ok(); }
+  // Confirmation: send a code (email also gets a one-tap link), then check it
+  p = path.match(/^me\/channels\/(\d+)\/(verify|confirm)$/);
+  if (p && method === 'POST' && p[2] === 'verify') return ok(await U.startChannelVerification(db, uid, Number(p[1])));
+  if (p && method === 'POST' && p[2] === 'confirm') {
+    const c = await U.confirmChannel(db, uid, Number(p[1]), String(body.code ?? ''));
+    return c ? ok({ channel: c }) : ok({ error: 'That code is wrong or has expired' }, 400);
+  }
 
   if (path === 'me/watches') {
     if (method === 'GET') return ok({ watches: await U.listWatches(db, uid) });

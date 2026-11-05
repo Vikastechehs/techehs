@@ -152,7 +152,9 @@ test('hotel engine finds sales, confirms them with a deep check, and expires the
   assert.ok(t.verifies > 0);
   await runHotelWorkers(db, mockHotelSource({ priceFactor: () => 1.3 }), s, after, { concurrency: 40, drain: true });
   const [c] = await db.query(`SELECT count(*) FILTER (WHERE status = 'live')::int AS live, count(*) FILTER (WHERE status = 'expired')::int AS expired,
-    count(*) FILTER (WHERE status = 'expired' AND reason LIKE 'price rose to ₹%')::int AS rose FROM hotel_deals`);
+    count(*) FILTER (WHERE status = 'expired' AND reason LIKE 'price rose to ₹%')::int AS rose,
+    count(*) FILTER (WHERE status = 'expired' AND ended_by = 'engine')::int AS by_engine FROM hotel_deals`);
+  assert.equal(c.by_engine, live.length, 'engine expiries are marked ended_by engine');
   assert.equal(c.live, 0);
   assert.equal(c.expired, live.length);
   assert.equal(c.rose, live.length);

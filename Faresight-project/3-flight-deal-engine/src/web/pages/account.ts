@@ -2,14 +2,14 @@
 import { config } from '../../config.ts';
 import { money } from '../../engine/notify.ts';
 import {
-  addChannel, deleteAccount, deleteAlert, deleteHotelAlert, exportUserData, listAlerts, listChannels, listHotelAlerts, listSaved,
-  listSavedHotels, listWatches, logoutEverywhere, removeChannel, removeWatch, setPassword, updateChannel, updateProfile, upsertAlert,
+  addChannel, confirmChannel, confirmChannelByLink, deleteAccount, deleteAlert, deleteHotelAlert, exportUserData, listAlerts, listChannels, listHotelAlerts, listSaved,
+  listSavedHotels, listWatches, logoutEverywhere, removeChannel, removeWatch, setPassword, startChannelVerification, updateChannel, updateProfile, upsertAlert,
   upsertHotelAlert, UserError, type Channel,
 } from '../../users/service.ts';
 import { telegramConnectLink } from '../../notify/telegram.ts';
 import { esc, fmtDate } from '../html.ts';
 import { HttpError, readJson, send, json } from '../http.ts';
-import { attempt, checkCsrf, clearSession, csrfField, csrfToken, flash, go, opt, page, postForm, requireUser, type P } from './common.ts';
+import { attempt, channelConfirmForms, checkCsrf, clearSession, csrfField, csrfToken, flash, go, opt, page, postForm, requireUser, safeNext, type P } from './common.ts';
 import { hotelCities, origins } from './data.ts';
 import { normalisePhone } from './alerts.ts';
 
@@ -18,6 +18,16 @@ const day = (ts: string) => fmtDate(new Date(ts).toISOString().slice(0, 10));
 
 export async function handleAccount(p: P): Promise<boolean> {
   const path = p.url.pathname, post = p.req.method === 'POST';
+  if (path === '/confirm' && !post) {
+    // One-tap link from a confirmation email: works without signing in
+    const ok = await confirmChannelByLink(p.db, Number(p.url.searchParams.get('c')), p.url.searchParams.get('t') ?? '');
+    page(p, ok ? 'Email confirmed' : 'Link expired', ok
+      ? `<div class="narrow"><h1>Email confirmed</h1><p class="lead">Thanks! Deal alerts will now reach this inbox.</p>
+          <p><a class="btn" href="/">See live deals</a> <a href="/account#channels">Your alert settings</a></p></div>`
+      : `<div class="narrow"><h1>This link has expired</h1><p class="lead">It may be old or already replaced by a newer one.</p>
+          <p>Sign in and open <a href="/account#channels">your account</a> to send a new confirmation code.</p></div>`, ok ? 200 : 400);
+    return true;
+  }
   if (path !== '/account' && !path.startsWith('/account/')) return false;
   const user = requireUser(p);
   if (!user) return true;
@@ -72,10 +82,11 @@ export async function handleAccount(p: P): Promise<boolean> {
     <section class="panel" id="channels"><h2>Where we send them</h2>
       ${channels.length ? `<ul class="list">${channels.map(c => `<li><form method="post" action="/account/channel/${c.id}" class="row">${f}
         <b style="min-width:150px">${KIND_NAMES[c.kind]}</b><span class="meta" style="margin:0;min-width:160px">${esc(c.kind === 'push' ? 'this browser or phone' : c.address)}${c.active ? '' : ' · paused'}</span>
+        ${c.verified_at ? '<span class="tag">Confirmed</span>' : '<span class="tag">Not confirmed</span>'}
         <select name="frequency" aria-label="How often">${opt('instant', 'Every deal', c.frequency)}${opt('daily', 'Daily summary', c.frequency)}</select>
         <button class="btn secondary">Save</button>
         <button class="btn secondary" name="active" value="${c.active ? '0' : '1'}">${c.active ? 'Pause' : 'Resume'}</button>
-        <button class="btn secondary" name="remove" value="1">Remove</button></form></li>`).join('')}</ul>` : '<p>No channels yet.</p>'}
+        <button class="btn secondary" name="remove" value="1">Remove</button></form>${channelConfirmForms(p, c, '/account#channels')}</li>`).join('')}</ul>` : '<p>No channels yet.</p>'}
       <div class="row" style="margin-top:12px">
         <a class="btn secondary" href="${esc(telegramConnectLink(user.id))}" rel="noopener">Connect Telegram</a>
         <button class="btn secondary" type="button" data-push data-csrf="${esc(csrfToken(p))}">Turn on app notifications</button><span class="meta" data-push-status></span>
@@ -138,11 +149,12 @@ export async function handleAccount(p: P): Promise<boolean> {
   if (path === '/account/profile') {
     await attempt(p, back('profile'), async () => {
       const phone = (f.get('phone') ?? '').trim();
-      await updateProfile(p.db, user.id, {
+      const u = await updateProfile(p.db, user.id, {
         name: (f.get('name') ?? '').trim() || null, phone: phone ? normalisePhone(phone) : null,
         home_airport: f.get('home_airport') || null, locale: f.get('locale') === 'hi' ? 'hi' : 'en', marketing_consent: f.get('marketing_consent') === '1',
       });
-      flash(p, 'Profile saved.');
+      const waiting = u.phone !== user.phone && (await listChannels(p.db, user.id)).some(c => c.kind === 'whatsapp' && c.address === u.phone && !c.verified_at);
+      flash(p, waiting ? 'Profile saved. We sent a code to your new WhatsApp number: enter it under "Where we send them".' : 'Profile saved.');
     });
     return true;
   }
@@ -177,6 +189,22 @@ export async function handleAccount(p: P): Promise<boolean> {
     });
     return true;
   }
+  const cv = path.match(/^\/account\/channel\/(\d+)\/(verify|confirm)$/);
+  if (cv) {
+    const to = safeNext(f.get('back'), back('channels'));
+    await attempt(p, to, async () => {
+      const id = Number(cv[1]);
+      if (cv[2] === 'verify') {
+        const r = await startChannelVerification(p.db, user.id, id);
+        flash(p, r.verified ? 'Already confirmed.' : 'We sent a new code.');
+        return;
+      }
+      const c = await confirmChannel(p.db, user.id, id, f.get('code') ?? '');
+      if (!c) throw new UserError('That code is wrong or has expired. Try again or send a new one.');
+      flash(p, `${KIND_NAMES[c.kind]} confirmed. Alerts will go there now.`);
+    });
+    return true;
+  }
   const ch = path.match(/^\/account\/channel\/(\d+)$/);
   if (ch) {
     await attempt(p, back('channels'), async () => {
@@ -191,8 +219,8 @@ export async function handleAccount(p: P): Promise<boolean> {
   }
   if (path === '/account/whatsapp') {
     await attempt(p, back('channels'), async () => {
-      await addChannel(p.db, user.id, { kind: 'whatsapp', address: normalisePhone(f.get('phone') ?? ''), frequency: 'instant' });
-      flash(p, 'WhatsApp added.');
+      const c = await addChannel(p.db, user.id, { kind: 'whatsapp', address: normalisePhone(f.get('phone') ?? ''), frequency: 'instant' });
+      flash(p, c.verified_at ? 'WhatsApp added.' : 'WhatsApp added. Enter the code we sent you there to start getting alerts.');
     });
     return true;
   }

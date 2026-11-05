@@ -20,7 +20,7 @@ export const unsubscribeUrl = (userId: number, channelId: number) =>
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const pct = (n: number) => `${Math.round(Number(n))}%`;
-const route = (d: any) => `${d.from_city} → ${d.to_city}`;
+export const route = (d: any) => `${d.from_city} → ${d.to_city}`;
 
 /** Plain-language reason a deal ended, from deals.reason. */
 export function endedReason(d: any): string {
@@ -90,8 +90,17 @@ export function renderDigest(items: { kind: DigestKind; d: any }[], ch: Target):
 
 // --- Hotels ---
 const stars = (n: unknown) => Number(n) >= 1 ? ' ' + '★'.repeat(Math.min(5, Math.round(Number(n)))) : '';
-const hotelPlace = (d: any) => `${d.hotel_name}, ${d.city_name}`;
+export const hotelPlace = (d: any) => `${d.hotel_name}, ${d.city_name}`;
 const monthName = (s: string) => new Date(String(s).slice(0, 10) + 'T00:00:00Z').toLocaleString('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+
+/** "Mar 2027" or "Mar 2027 – May 2027" from the first and last travel date; falls back to the deal month. */
+export function monthWindow(first: unknown, last: unknown, month?: unknown): string {
+  const f = first ? String(first) : '', l = last ? String(last) : '';
+  if (f && l && monthName(f) !== monthName(l)) return `${monthName(f)} – ${monthName(l)}`;
+  if (f) return monthName(f);
+  if (month) return monthName(month instanceof Date ? month.toISOString() : String(month));
+  return '';
+}
 
 /** Plain-language reason a hotel deal ended, from hotel_deals.reason. */
 export function hotelEndedReason(d: any): string {
@@ -106,9 +115,7 @@ export function hotelEndedReason(d: any): string {
 
 /** The text of a live hotel deal: name, stars and city; price; dates; (the link is added by finish). */
 export function hotelDealText(d: any): string[] {
-  const first = d.first_checkin ?? null, last = d.last_checkin ?? null;
-  const window = first && last && monthName(first) !== monthName(last) ? `${monthName(first)} – ${monthName(last)}`
-    : first ? monthName(first) : d.month ? monthName(d.month instanceof Date ? d.month.toISOString() : String(d.month)) : '';
+  const window = monthWindow(d.first_checkin, d.last_checkin, d.month);
   const dates = Number(d.dates ?? 0);
   return [
     `🏨 ${d.hotel_name}${stars(d.stars)} · ${d.city_name}`,

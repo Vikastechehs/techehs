@@ -2,10 +2,11 @@
 // Counts, the hotel deal review queue (Publish / Reject), recent decisions and the hotel search queue.
 import { config } from '../config.ts';
 import { money } from '../engine/notify.ts';
-import { reviewHotelDeal } from '../hotels/deals.ts';
+import { endHotelDeal, reviewHotelDeal } from '../hotels/deals.ts';
 import { onHotelDealLive } from '../notify/hotels.ts';
 import { ago, esc, layout } from './html.ts';
-import { redirect, send, type Handler } from './http.ts';
+import { readForm, redirect, send, type Handler } from './http.ts';
+import { endDealForm, manualEndReason } from './admin-end.ts';
 import { HOTEL_DEAL_SQL } from './hotels/data.ts';
 
 const stat = (label: string, v: unknown) => `<span class="stat"><b>${esc(typeof v === 'number' ? v.toLocaleString('en-IN') : v)}</b>${esc(label)}</span>`;
@@ -19,8 +20,18 @@ export const handleAdminHotels: Handler = async ({ db, req, res, url }) => {
   if (act) {
     if (req.method !== 'POST') { send(res, 405, 'Use POST', 'text/plain', { allow: 'POST' }); return true; }
     // Approving tells users with matching hotel alerts (the user-data module's fan-out).
-    await reviewHotelDeal(db, Number(act[1]), act[2] === 'approve', async id => { await onHotelDealLive(db, id); });
+    const done = await reviewHotelDeal(db, Number(act[1]), act[2] === 'approve', async id => { await onHotelDealLive(db, id); });
+    // Rejecting a deal that is already live ends it properly, so users who were told get the "Ended" message
+    if (!done && act[2] === 'reject') await endHotelDeal(db, Number(act[1]), manualEndReason('hotel', 'other'));
     redirect(res, '/admin/hotels');
+    return true;
+  }
+  const end = path.match(/^\/admin\/hotels\/deal\/(\d{1,9})\/end$/);
+  if (end) {
+    if (req.method !== 'POST') { send(res, 405, 'Use POST', 'text/plain', { allow: 'POST' }); return true; }
+    const form = await readForm(req);
+    await endHotelDeal(db, Number(end[1]), manualEndReason('hotel', form.get('reason') ?? 'other', form.get('note') ?? ''));
+    redirect(res, '/admin/hotels#live');
     return true;
   }
   const pv = path.match(/^\/admin\/hotels\/preview\/(\d{1,9})$/);
@@ -51,6 +62,7 @@ export const handleAdminHotels: Handler = async ({ db, req, res, url }) => {
   const byStatus = Object.fromEntries((await db.query(`SELECT status, count(*)::int AS n FROM hotel_deals GROUP BY status`)).map(r => [r.status, r.n]));
   const n = (s: string) => byStatus[s] ?? 0;
   const review = await db.query(`${HOTEL_DEAL_SQL} WHERE hd.status = 'review' ORDER BY hd.saving_pct DESC, hd.id`);
+  const live = await db.query(`${HOTEL_DEAL_SQL} WHERE hd.status = 'live' ORDER BY hd.published_at DESC NULLS LAST, hd.id DESC LIMIT 200`);
   const recent = await db.query(`${HOTEL_DEAL_SQL} WHERE hd.status IN ('live','expired','rejected')
     ORDER BY coalesce(hd.expired_at, hd.published_at, hd.first_seen) DESC, hd.id DESC LIMIT 15`);
   const queue = await db.query(`SELECT kind, status, count(*)::int AS n, min(run_at) FILTER (WHERE status = 'queued') AS next_run
@@ -69,6 +81,13 @@ export const handleAdminHotels: Handler = async ({ db, req, res, url }) => {
       <td>${money(d.per_night, d.currency)}</td><td>${money(d.normal_per_night, d.currency)}</td><td>${Math.round(d.saving_pct)}%</td><td>${esc(d.dates)}</td>
       <td><form method="post" action="/admin/hotels/deal/${esc(d.id)}/approve" style="display:inline"><button class="btn">Publish</button></form>
           <form method="post" action="/admin/hotels/deal/${esc(d.id)}/reject" style="display:inline"><button class="btn secondary">Reject</button></form></td></tr>`), 'Nothing waiting.')}
+    <h2 id="live">Live deals (${live.length})</h2>
+    ${live.length ? '<p class="meta">Ending a deal tells users who were alerted or saved it, with the reason you pick.</p>' : ''}
+    ${table(['Hotel', 'A night', 'Below', 'Published', 'Verified', ''], live.map(d => `<tr>
+      <td><a href="/hotel-deal/${esc(d.id)}">${esc(d.name)}</a><div class="meta" style="margin:0">${esc(d.city_name)}</div></td>
+      <td>${money(d.per_night, d.currency)}</td><td>${Math.round(d.saving_pct)}%</td>
+      <td class="meta">${esc(ago(d.published_at))}</td><td class="meta">${esc(ago(d.last_verified))}</td>
+      <td>${endDealForm('hotel', `/admin/hotels/deal/${d.id}/end`)}</td></tr>`), 'No live deals.')}
     <h2>Recent decisions</h2>
     ${table(['Hotel', 'Status', 'A night', 'Below', 'Note'], recent.map(d => `<tr>
       <td>${d.status === 'rejected' ? esc(d.name) : `<a href="/hotel-deal/${esc(d.id)}">${esc(d.name)}</a>`}<div class="meta" style="margin:0">${esc(d.city_name)}</div></td>

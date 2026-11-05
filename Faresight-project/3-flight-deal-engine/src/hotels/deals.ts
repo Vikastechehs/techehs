@@ -147,7 +147,7 @@ export async function maybeFinishHotelDeep(db: Db, s: Settings, dealId: number, 
 }
 
 /** Admin decision on a hotel deal in 'review'. Approve -> live (+ notify), reject -> rejected. */
-export async function reviewHotelDeal(db: Db, hotelDealId: number, approve: boolean, notify: HotelNotify): Promise<void> {
+export async function reviewHotelDeal(db: Db, hotelDealId: number, approve: boolean, notify: HotelNotify): Promise<boolean> {
   const rows = await db.query(`
     UPDATE hotel_deals SET status = $2, published_at = CASE WHEN $2 = 'live' THEN now() END,
            last_verified = CASE WHEN $2 = 'live' THEN now() ELSE last_verified END,
@@ -155,6 +155,24 @@ export async function reviewHotelDeal(db: Db, hotelDealId: number, approve: bool
            expired_at = CASE WHEN $2 = 'rejected' THEN now() END
     WHERE id = $1 AND status = 'review' RETURNING id`, [hotelDealId, approve ? 'live' : 'rejected']);
   if (rows.length && approve) await notify(hotelDealId);
+  return rows.length > 0;
+}
+
+/**
+ * Ends a hotel deal by hand. A live deal becomes 'expired' and the ended hook runs (users who were alerted or saved it
+ * get the "Ended" message); a deal still in review is just rejected. Queued searches for it are cancelled.
+ * Returns false (and does nothing) if the deal is not live or in review.
+ */
+export async function endHotelDeal(db: Db, hotelDealId: number, reason: string, by = 'admin'): Promise<boolean> {
+  const rows = await db.query(`
+    UPDATE hotel_deals SET status = CASE WHEN status = 'live' THEN 'expired' ELSE 'rejected' END,
+           expired_at = now(), reason = $2, ended_by = $3
+    WHERE id = $1 AND status IN ('live','review') RETURNING status`, [hotelDealId, reason, by]);
+  if (!rows.length) return false;
+  await db.query(`UPDATE hotel_search_jobs SET status = 'failed', error = 'deal ended', finished_at = now()
+    WHERE hotel_deal_id = $1 AND status = 'queued'`, [hotelDealId]);
+  if (rows[0].status === 'expired') await dealEnded(hotelDealId);
+  return true;
 }
 
 /** Queue re-checks for live deals not verified in the last N hours: their cheapest future stays. */
@@ -198,7 +216,7 @@ export async function maybeFinishHotelVerify(db: Db, s: Settings, dealId: number
     await db.query(`UPDATE hotel_deals SET per_night = $2, saving_pct = $3, last_verified = now() WHERE id = $1`,
       [dealId, perNight, savingPct(perNight, deal.normal_per_night)]);
   } else {
-    const ended = await db.query(`UPDATE hotel_deals SET status = 'expired', expired_at = now(), reason = $2 WHERE id = $1 AND status = 'live' RETURNING id`,
+    const ended = await db.query(`UPDATE hotel_deals SET status = 'expired', expired_at = now(), reason = $2, ended_by = 'engine' WHERE id = $1 AND status = 'live' RETURNING id`,
       [dealId, best == null ? 'no rate found at re-check' : `price rose to ${inr(best)} (shown ${inr(deal.per_night)})`]);
     if (ended.length) await dealEnded(dealId);
   }
@@ -207,7 +225,7 @@ export async function maybeFinishHotelVerify(db: Db, s: Settings, dealId: number
 /** Live or review deals whose stays have all passed are expired. */
 export async function expirePastHotelDeals(db: Db) {
   const rows = await db.query(`
-    UPDATE hotel_deals d SET status = 'expired', expired_at = now(), reason = 'all dates passed'
+    UPDATE hotel_deals d SET status = 'expired', expired_at = now(), reason = 'all dates passed', ended_by = 'engine'
     WHERE status IN ('live','review')
       AND NOT EXISTS (SELECT 1 FROM hotel_deal_dates dd WHERE dd.hotel_deal_id = d.id AND dd.checkin >= current_date + 1)
     RETURNING id`);

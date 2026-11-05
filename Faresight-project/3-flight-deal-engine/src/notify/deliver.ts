@@ -6,6 +6,7 @@
 // The same lease doubles as the retry back-off. sent_at is set to the real send time once delivered.
 import { config } from '../config.ts';
 import type { Db, Row } from '../db.ts';
+import { buildTextPayload, lastInbound, metaError, templateFor, withinWindow } from './whatsapp.ts';
 
 export const MAX_ATTEMPTS = 5;
 
@@ -40,6 +41,45 @@ async function httpResult(res: Response, what: string): Promise<SendResult> {
   return { ok: false, error: `${what}: HTTP ${res.status} ${text}`.trim() };
 }
 
+/**
+ * WhatsApp: sign-in/verification codes always use the authentication template. Other messages go as free text when the
+ * person wrote to us in the last 24 hours, otherwise as the approved template for their kind (see whatsapp.ts).
+ * The returned message id is kept in outbox.meta.wamid so status webhooks can find the row.
+ */
+async function sendWhatsApp(db: Db, m: Row, f: typeof fetch): Promise<SendResult> {
+  const meta = m.meta ?? {};
+  const post = async (payload: unknown, mode: 'text' | 'template'): Promise<SendResult & { code?: number }> => {
+    const res = await f(`https://graph.facebook.com/v21.0/${config.whatsappPhoneId}/messages`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${config.whatsappToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text().catch(() => '');
+    let body: any = null; try { body = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+    if (res.ok) {
+      const wamid = body?.messages?.[0]?.id;
+      await db.query(`UPDATE outbox SET meta = coalesce(meta, '{}'::jsonb) || jsonb_build_object('wa_mode', $2::text, 'wamid', $3::text) WHERE id = $1`,
+        [m.id, mode, wamid ?? null]);
+      return { ok: true };
+    }
+    const e = body ? metaError(res.status, body) : { code: 0, message: `whatsapp: HTTP ${res.status} ${text.slice(0, 200)}`.trim(), permanent: res.status >= 400 && res.status < 500 && res.status !== 429 };
+    return { ok: false, error: e.message, permanent: e.permanent, code: e.code };
+  };
+  const template = async (): Promise<SendResult> => {
+    const t = await templateFor(db, m);
+    if ('error' in t) return { ok: false, error: t.error, permanent: true };
+    const { code: _code, ...r } = await post(t.payload, 'template');
+    return r;
+  };
+  if (meta.template === 'code') return template();
+  if (!withinWindow(await lastInbound(db, m))) return template();
+  const r = await post(buildTextPayload(m.to_address, m.body), 'text');
+  // Our record of the window was stale (Meta says it closed): fall back to the template right away
+  if (!r.ok && r.code === 131047 && meta.kind) return template();
+  const { code: _code, ...rest } = r;
+  return rest;
+}
+
 async function send(db: Db, m: Row, o: DeliverOptions): Promise<SendResult> {
   const f = o.fetchImpl ?? fetch;
   const meta = m.meta ?? {};
@@ -70,13 +110,7 @@ async function send(db: Db, m: Row, o: DeliverOptions): Promise<SendResult> {
     }
     case 'whatsapp': {
       if (!config.whatsappToken || !config.whatsappPhoneId) return { ok: true, logged: true };
-      const res = await f(`https://graph.facebook.com/v21.0/${config.whatsappPhoneId}/messages`, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${config.whatsappToken}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: String(m.to_address).replace(/\D/g, ''),
-          type: 'text', text: { preview_url: true, body: m.body } }),
-      });
-      return httpResult(res, 'whatsapp');
+      return sendWhatsApp(db, m, f);
     }
     case 'push': {
       if (!o.pushImpl && (!config.vapidPublicKey || !config.vapidPrivateKey)) return { ok: true, logged: true };

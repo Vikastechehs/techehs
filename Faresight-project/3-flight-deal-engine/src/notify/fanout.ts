@@ -1,5 +1,6 @@
 // Per-user fan-out: when a deal goes live (or ends), write one notifications row per matching user and channel,
 // and queue the message in the outbox for instant channels. Daily channels wait for the digest (digest.ts).
+// Only confirmed channels (verified_at set) get anything, "ended" messages included.
 import type { Db } from '../db.ts';
 import { dealSummary } from '../engine/notify.ts';
 import { enqueue, type OutChannel } from './outbox.ts';
@@ -19,7 +20,7 @@ async function fanOut(db: Db, d: any, targets: Targets): Promise<FanoutResult> {
   if (!targets.size) return res;
   const channels = await db.query<ChannelRow>(`
     SELECT c.id, c.user_id, c.kind, c.address, c.frequency FROM notification_channels c JOIN users u ON u.id = c.user_id
-    WHERE c.user_id = ANY($1::int[]) AND c.active AND u.status = 'active' ORDER BY c.id`, [[...targets.keys()]]);
+    WHERE c.user_id = ANY($1::int[]) AND c.active AND c.verified_at IS NOT NULL AND u.status = 'active' ORDER BY c.id`, [[...targets.keys()]]);
   for (const c of channels) {
     const t = targets.get(c.user_id)!;
     if (t.channels && !t.channels.has(c.id)) continue;

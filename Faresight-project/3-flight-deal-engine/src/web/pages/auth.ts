@@ -96,7 +96,7 @@ export async function handleAuth(p: P): Promise<boolean> {
       const auth = await registerWithPassword(p.db, { email: (f.get('email') ?? '').trim(), password: f.get('password') ?? '', name: (f.get('name') ?? '').trim() || undefined }, meta(p));
       setSession(p, auth.token);
       await applyPendingAlerts(p, auth.user.id);
-      flash(p, 'Welcome! Your account is ready.');
+      flash(p, 'Welcome! Your account is ready. Check your inbox: tap the link we sent to confirm your email for alerts.');
       return next;
     });
     return true;

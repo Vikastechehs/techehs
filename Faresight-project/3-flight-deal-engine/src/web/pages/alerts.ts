@@ -5,7 +5,7 @@ import { addChannel, listAlerts, listChannels, listHotelAlerts, requestLoginCode
 import { telegramConnectLink } from '../../notify/telegram.ts';
 import { esc } from '../html.ts';
 import { setCookie } from '../http.ts';
-import { attempt, csrfField, csrfToken, flash, page, postForm, secure, signValue, unsignValue, type P } from './common.ts';
+import { attempt, channelConfirmForms, csrfField, csrfToken, flash, page, postForm, secure, signValue, unsignValue, type P } from './common.ts';
 import { groupByRegion, hotelCities, origins } from './data.ts';
 
 const PENDING_COOKIE = 'fs_pending';
@@ -132,6 +132,12 @@ export async function handleAlerts(p: P): Promise<boolean> {
     const alerts = await listAlerts(p.db, p.user.id);
     const hotelAlerts = await listHotelAlerts(p.db, p.user.id);
     const steps: string[] = [];
+    // Email and WhatsApp channels get alerts only once confirmed
+    const waiting = (await listChannels(p.db, p.user.id)).filter(c => c.active && !c.verified_at && (c.kind === 'whatsapp' || c.kind === 'email'));
+    for (const c of waiting.filter(c => c.kind === 'whatsapp'))
+      steps.push(`<h3>Enter the code we sent to your WhatsApp</h3><p class="meta">We sent a 6-digit code to ${esc(c.address)}. Alerts go there once you enter it.</p>${channelConfirmForms(p, c, '/alerts/done')}`);
+    for (const c of waiting.filter(c => c.kind === 'email'))
+      steps.push(`<h3>Check your inbox</h3><p class="meta">We sent a confirmation link to ${esc(c.address)}. Tap it (or enter the code from the email) and alerts will start.</p>${channelConfirmForms(p, c, '/alerts/done')}`);
     if (done.telegram) steps.push(`<p><a class="btn" href="${esc(telegramConnectLink(p.user.id))}" rel="noopener">Connect Telegram</a> <span class="meta">Opens Telegram; tap Start.</span></p>`);
     if (done.push) steps.push(`<p><button class="btn" type="button" data-push data-csrf="${esc(csrfToken(p))}">Turn on app notifications</button> <span class="meta" data-push-status></span></p>
       <script src="/static/push.js" defer></script>`);
