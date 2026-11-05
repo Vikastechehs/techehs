@@ -123,3 +123,140 @@ CREATE TABLE IF NOT EXISTS clicks (
   partner      text,
   clicked_at   timestamptz NOT NULL DEFAULT now()
 );
+
+-- ============================================================================================
+-- Users and user data (accounts, sessions, alerts, channels, watches, saved deals, notifications)
+-- ============================================================================================
+
+CREATE TABLE IF NOT EXISTS users (
+  id                serial PRIMARY KEY,
+  email             text NOT NULL,
+  name              text,
+  phone             text,                          -- E.164, e.g. +919812345678
+  password_hash     text,                          -- scrypt$N$salt$hash; null = code-only login
+  email_verified_at timestamptz,
+  home_airport      text REFERENCES airports(iata),
+  market            text NOT NULL DEFAULT 'IN',
+  currency          text NOT NULL DEFAULT 'INR',
+  locale            text NOT NULL DEFAULT 'en',
+  role              text NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
+  status            text NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled','deleted')),
+  marketing_consent boolean NOT NULL DEFAULT false,
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  last_login_at     timestamptz,
+  deleted_at        timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users (lower(email)) WHERE status <> 'deleted';
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id           text PRIMARY KEY,                   -- sha256 hex of the session token (the token itself is never stored)
+  user_id      int  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind         text NOT NULL DEFAULT 'web' CHECK (kind IN ('web','app')),
+  user_agent   text,
+  ip           text,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  expires_at   timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions (user_id);
+
+CREATE TABLE IF NOT EXISTS login_codes (
+  id         serial PRIMARY KEY,
+  email      text NOT NULL,
+  code_hash  text NOT NULL,                        -- sha256 hex of the 6-digit code
+  purpose    text NOT NULL DEFAULT 'login' CHECK (purpose IN ('login','verify','reset')),
+  attempts   int  NOT NULL DEFAULT 0,
+  expires_at timestamptz NOT NULL,
+  used_at    timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS login_codes_email ON login_codes (lower(email), created_at DESC);
+
+-- City alerts: "tell me about deals from DEL at least 35% below normal"
+CREATE TABLE IF NOT EXISTS alert_subscriptions (
+  id             serial PRIMARY KEY,
+  user_id        int  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  origin         text NOT NULL REFERENCES airports(iata),
+  min_saving_pct int  NOT NULL DEFAULT 25 CHECK (min_saving_pct BETWEEN 25 AND 90),
+  max_price      double precision,                 -- optional budget cap
+  regions        text[],                           -- optional: seAsia, saGulf, eastAsia, europe, longHaul (null = all)
+  active         boolean NOT NULL DEFAULT true,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, origin)
+);
+
+-- Where to send messages. kind=push: address = push endpoint, meta = {keys:{p256dh,auth}}
+CREATE TABLE IF NOT EXISTS notification_channels (
+  id          serial PRIMARY KEY,
+  user_id     int  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind        text NOT NULL CHECK (kind IN ('email','telegram','whatsapp','push')),
+  address     text NOT NULL,
+  meta        jsonb,
+  frequency   text NOT NULL DEFAULT 'instant' CHECK (frequency IN ('instant','daily')),
+  verified_at timestamptz,
+  active      boolean NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, kind, address)
+);
+
+-- Route watch: notify when this route gets a live deal (optionally under a price)
+CREATE TABLE IF NOT EXISTS route_watches (
+  id         serial PRIMARY KEY,
+  user_id    int NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  route_id   int NOT NULL REFERENCES routes(id),
+  max_price  double precision,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, route_id)
+);
+
+CREATE TABLE IF NOT EXISTS saved_deals (
+  user_id    int NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deal_id    int NOT NULL REFERENCES deals(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, deal_id)
+);
+
+-- One row per message to a user about a deal; the unique key stops duplicate sends
+CREATE TABLE IF NOT EXISTS notifications (
+  id         bigserial PRIMARY KEY,
+  user_id    int  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  deal_id    int  REFERENCES deals(id),
+  channel_id int  REFERENCES notification_channels(id) ON DELETE SET NULL,
+  kind       text NOT NULL CHECK (kind IN ('deal_live','deal_ended','route_watch','digest','system')),
+  status     text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed','skipped')),
+  attempts   int  NOT NULL DEFAULT 0,
+  error      text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  sent_at    timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS notifications_once ON notifications (user_id, coalesce(deal_id, 0), kind, coalesce(channel_id, 0)) WHERE kind <> 'system' AND kind <> 'digest';
+CREATE INDEX IF NOT EXISTS notifications_queue ON notifications (status, created_at);
+
+-- Every outgoing message (login codes, alerts) is written here first, then delivered. Works without any provider set up.
+CREATE TABLE IF NOT EXISTS outbox (
+  id         bigserial PRIMARY KEY,
+  channel    text NOT NULL CHECK (channel IN ('email','telegram','whatsapp','push')),
+  to_address text NOT NULL,
+  subject    text,
+  body       text NOT NULL,
+  meta       jsonb,
+  status     text NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','sent','failed','logged')),
+  attempts   int  NOT NULL DEFAULT 0,
+  error      text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  sent_at    timestamptz
+);
+CREATE INDEX IF NOT EXISTS outbox_queue ON outbox (status, created_at);
+
+-- Audit trail of account actions (login, export, delete, consent changes)
+CREATE TABLE IF NOT EXISTS user_events (
+  id         bigserial PRIMARY KEY,
+  user_id    int REFERENCES users(id) ON DELETE SET NULL,
+  kind       text NOT NULL,
+  data       jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS user_events_user ON user_events (user_id, created_at DESC);
+
+ALTER TABLE clicks ADD COLUMN IF NOT EXISTS user_id int REFERENCES users(id) ON DELETE SET NULL;

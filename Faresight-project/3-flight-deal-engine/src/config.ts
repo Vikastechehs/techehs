@@ -29,6 +29,17 @@ export const config = {
   telegramToken: env('TELEGRAM_BOT_TOKEN'),
   telegramChat: env('TELEGRAM_CHAT_ID'),
   // 'scrapedo' when a token is set, otherwise simulated fares so everything can be tried without credits
+  // Users and messaging
+  appSecret: env('APP_SECRET', 'dev-secret-change-me'),      // signs unsubscribe links; set a long random value in production
+  sessionDays: Number(env('SESSION_DAYS', '60')),
+  emailFrom: env('EMAIL_FROM', 'Faresight <deals@example.com>'),
+  resendApiKey: env('RESEND_API_KEY'),                       // email via resend.com HTTP API; empty = messages only logged in the outbox
+  whatsappToken: env('WHATSAPP_TOKEN'),                      // WhatsApp Cloud API
+  whatsappPhoneId: env('WHATSAPP_PHONE_NUMBER_ID'),
+  telegramBotUsername: env('TELEGRAM_BOT_USERNAME'),         // for per-user "connect Telegram" links
+  vapidPublicKey: env('VAPID_PUBLIC_KEY'),                   // web push
+  vapidPrivateKey: env('VAPID_PRIVATE_KEY'),
+  vapidSubject: env('VAPID_SUBJECT', 'mailto:admin@example.com'),
   source: env('FARE_SOURCE', env('SCRAPEDO_TOKEN') ? 'scrapedo' : 'mock'),
 };
 

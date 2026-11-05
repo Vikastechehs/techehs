@@ -7,6 +7,11 @@ import { bookingUrl, partnerName } from '../engine/links.ts';
 import { money } from '../engine/notify.ts';
 import { creditsThisMonth, queueStats } from '../scheduler.ts';
 import { ago, dealCard, esc, fmtDate, layout } from './html.ts';
+import type { Ctx } from './http.ts';
+import { HttpError } from './http.ts';
+import { handleUserApi } from '../users/api.ts';
+import { handleAccountPages } from './account.ts';
+import { handleAdminUsers } from './admin-users.ts';
 
 const DEAL_LIST_SQL = `
   SELECT d.*, r.origin, r.destination, r.max_stops, ao.city AS from_city, ad.city AS to_city,
@@ -38,6 +43,8 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
     try {
       const url = new URL(req.url ?? '/', 'http://localhost');
       const p = url.pathname;
+      const ctx: Ctx = { db, req, res, url, notify };
+      if (p.startsWith('/api/v1/') && await handleUserApi(ctx)) return;
 
       if (p === '/health') {
         const [d] = await db.query(`SELECT count(*) FILTER (WHERE status = 'live')::int AS live FROM deals`);
@@ -110,6 +117,7 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
           for (const [k, v] of form) await db.query(`UPDATE settings SET value = $2 WHERE key = $1`, [k, v.trim()]);
           res.writeHead(303, { location: '/admin#settings' }); return res.end();
         }
+        if (p.startsWith('/admin/users') && await handleAdminUsers(ctx)) return;
         if (p !== '/admin') return notFound(res);
         const s = await getSettings(db);
         const [counts] = await db.query(`SELECT
@@ -147,8 +155,15 @@ export function startServer(db: Db, notify: Notify, port = config.port) {
         return send(res, 200, layout('Admin', body, { admin: true }));
       }
 
+      if (await handleAccountPages(ctx)) return;
       return notFound(res);
     } catch (e) {
+      if (e instanceof HttpError) {
+        if (res.headersSent) return res.end();
+        const isApi = (req.url ?? '').startsWith('/api/');
+        return isApi ? send(res, e.status, JSON.stringify({ error: e.message }), 'application/json')
+                     : send(res, e.status, layout('Error', `<h1>${esc(e.message)}</h1>`));
+      }
       console.error(e);
       send(res, 500, layout('Error', '<h1>Something went wrong</h1>'));
     }

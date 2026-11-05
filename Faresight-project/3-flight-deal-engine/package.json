@@ -13,7 +13,7 @@
     "status": "node src/cli.ts status",
     "sweep-once": "node src/cli.ts sweep-once",
     "demo": "node src/cli.ts demo",
-    "test": "node --test test/engine.test.ts",
+    "test": "node --test test/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
