@@ -72,6 +72,7 @@ The website uses the `fs_session` cookie; the Android app sends `"client": "app"
 | `DELETE me` | Delete the account |
 | `GET`/`POST me/alerts`, `DELETE me/alerts/:origin` | City alerts (POST creates or updates the alert for an origin) |
 | `GET`/`POST me/channels`, `PATCH`/`DELETE me/channels/:id` | Notification channels |
+| `POST me/channels/:id/verify`, `POST me/channels/:id/confirm` `{code}` | Send / check the confirmation code. Alerts go only to confirmed channels (email and WhatsApp get a code; email also a one-tap `/confirm` link; Telegram and app notifications are confirmed by connecting) |
 | `GET`/`POST me/watches`, `DELETE me/watches/:id` | Route watches |
 | `GET me/saved`, `PUT`/`DELETE me/saved/:dealId` | Saved deals |
 | `GET airports` | Airports, with which ones are departure cities |
