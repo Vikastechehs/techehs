@@ -3,7 +3,7 @@
 import type { IncomingMessage } from 'node:http';
 import type { Db, Row } from '../db.ts';
 import { config } from '../config.ts';
-import { enqueue } from '../notify/outbox.ts';
+import { enqueue, forgetAddress } from '../notify/outbox.ts';
 import { cookies } from '../web/http.ts';
 import { DUMMY_HASH, hashPassword, newCode, newToken, sameHash, sha256, verifyPassword } from './crypto.ts';
 
@@ -367,6 +367,10 @@ export async function exportUserData(db: Db, userId: number): Promise<Record<str
 export async function deleteAccount(db: Db, userId: number): Promise<void> {
   const [u] = await db.query(`SELECT email, status FROM users WHERE id = $1`, [userId]);
   if (!u || u.status === 'deleted') return;
+  // Erase queued and past messages to this person too (they hold the address and old sign-in codes)
+  const addrs = (await db.query(`SELECT address FROM notification_channels WHERE user_id = $1`, [userId])).map(r => String(r.address));
+  const [p] = await db.query(`SELECT phone FROM users WHERE id = $1`, [userId]);
+  await forgetAddress(db, [u.email, ...addrs, ...(p?.phone ? [p.phone, String(p.phone).replace(/\D/g, '')] : [])]);
   for (const t of ['sessions', 'alert_subscriptions', 'notification_channels', 'route_watches', 'saved_deals'])
     await db.query(`DELETE FROM ${t} WHERE user_id = $1`, [userId]);
   await db.query(`DELETE FROM login_codes WHERE lower(email) = lower($1)`, [u.email]);

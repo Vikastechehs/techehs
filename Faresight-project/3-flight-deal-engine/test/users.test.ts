@@ -270,6 +270,8 @@ test('export and delete account; the email can sign up again', async () => {
   }
   const [lc] = await db.query(`SELECT count(*)::int AS n FROM login_codes WHERE email = $1`, [email]);
   assert.equal(lc.n, 0);
+  const [ob] = await db.query(`SELECT count(*)::int AS n FROM outbox WHERE lower(to_address) = $1`, [email]);
+  assert.equal(ob.n, 0, 'sign-in code emails are erased too');
   const [ev] = await db.query(`SELECT count(*)::int AS n FROM user_events WHERE user_id = $1 AND kind IN ('export','delete')`, [id]);
   assert.equal(ev.n, 2);
 
